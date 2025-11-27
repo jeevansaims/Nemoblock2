@@ -91,7 +91,8 @@ export function DailyDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-full border border-neutral-800 bg-[#050506] text-sm p-0 overflow-hidden">
+      <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] border border-neutral-800 bg-[#050506] text-sm p-0 overflow-hidden">
+        <div className="max-h-[88vh] overflow-y-auto">
         {/* HEADER */}
         <header className="px-6 pt-6 pb-4 border-b border-neutral-800">
           <div className="flex items-start justify-between gap-4">
@@ -218,7 +219,8 @@ export function DailyDetailModal({
           </div>
 
           <div className="rounded-xl border border-neutral-800 bg-[#050608] overflow-hidden">
-            <Table>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[720px]">
               <TableHeader>
                 <TableRow className="bg-neutral-900/70 border-neutral-800">
                   <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
@@ -318,9 +320,11 @@ export function DailyDetailModal({
                   );
                 })}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           </div>
         </section>
+        </div>
       </DialogContent>
     </Dialog>
   );
