@@ -276,6 +276,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           stat.tradeCount > 0
             ? Math.round((stat.winCount / stat.tradeCount) * 100)
             : 0,
+        premium: stat.trades.reduce((sum, t) => sum + (t.premium || 0), 0),
+        margin: stat.trades.reduce((sum, t) => sum + (t.margin || 0), 0),
       });
     });
 
@@ -486,6 +488,7 @@ function WeeklySummaryGrid({
                 "bg-gradient-to-br",
                 tone
               )}
+              title={`P/L: ${formatCompactUsd(week.netPL)} • Trades: ${week.tradeCount} • Max Margin: ${formatCompactUsd(week.maxMargin)}`}
             >
               <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide">
                 <span className="text-white/70">{rangeLabel}</span>

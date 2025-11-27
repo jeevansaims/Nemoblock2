@@ -1,6 +1,17 @@
 "use client";
 
+import { useMemo, useState } from "react";
+
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -36,6 +47,8 @@ export interface DaySummary {
     netPL: number;
     tradeCount: number;
     winRate: number;
+    premium?: number;
+    margin?: number;
   }[];
   trades: DailyTrade[];
 }
@@ -53,9 +66,40 @@ const fmtUsd = (v: number) =>
     maximumFractionDigits: 2,
   })}`;
 
+function exportCsv(trades: DailyTrade[], mode: "day" | "week", label: string) {
+  const headers = ["Time", "Strategy", "Legs", "Premium", "Margin", "P/L"];
+  const rows = trades.map((t) => {
+    const time =
+      t.dateOpened != null
+        ? format(
+            new Date(t.dateOpened),
+            mode === "week" ? "MMM d HH:mm" : "HH:mm:ss"
+          )
+        : "";
+    return [
+      `"${time}"`,
+      `"${(t.strategy || "").replace(/"/g, '""')}"`,
+      `"${(t.legs || "").replace(/"/g, '""')}"`,
+      t.premium.toString(),
+      t.margin.toString(),
+      t.pl.toString(),
+    ].join(",");
+  });
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${label.replace(/\s+/g, "_")}_trades.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const fmtCompactUsd = (v: number) => {
   const abs = Math.abs(v);
   const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000) return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return `${sign}$${abs.toLocaleString()}`;
@@ -67,10 +111,31 @@ export function DailyDetailModal({
   summary,
   mode = "day",
 }: DailyDetailModalProps) {
+  const [filter, setFilter] = useState<"all" | "wins" | "losses">("all");
+  const [sort, setSort] = useState<"pl_desc" | "pl_asc" | "time_desc" | "time_asc">(
+    "time_asc"
+  );
+
+  const filteredTrades = useMemo(() => {
+    if (!summary) return [];
+    let list = [...summary.trades];
+    if (filter === "wins") list = list.filter((t) => t.pl > 0);
+    if (filter === "losses") list = list.filter((t) => t.pl < 0);
+
+    list.sort((a, b) => {
+      if (sort === "pl_desc") return b.pl - a.pl;
+      if (sort === "pl_asc") return a.pl - b.pl;
+
+      const aTime = a.dateOpened ? new Date(a.dateOpened).getTime() : 0;
+      const bTime = b.dateOpened ? new Date(b.dateOpened).getTime() : 0;
+      return sort === "time_desc" ? bTime - aTime : aTime - bTime;
+    });
+    return list;
+  }, [summary, filter, sort]);
+
   if (!summary) return null;
 
-  const { date, endDate, netPL, tradeCount, winRate, maxMargin, trades } =
-    summary;
+  const { date, endDate, netPL, tradeCount, winRate, maxMargin, trades } = summary;
 
   const totalPremium = trades.reduce((sum, t) => sum + (t.premium || 0), 0);
   const totalMargin = trades.reduce((sum, t) => sum + (t.margin || 0), 0);
@@ -200,6 +265,18 @@ export function DailyDetailModal({
                           : "--"}
                       </div>
                     </div>
+                    <div>
+                      <div className="uppercase tracking-wide text-[10px]">Premium</div>
+                      <div className="text-neutral-200 font-semibold">
+                        {fmtCompactUsd(d.premium || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="uppercase tracking-wide text-[10px]">Margin</div>
+                      <div className="text-neutral-200 font-semibold">
+                        {fmtCompactUsd(d.margin || 0)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -209,42 +286,103 @@ export function DailyDetailModal({
 
         {/* TABLE */}
         <section className="px-6 pb-5 pt-2">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">
-              Trade Log ({trades.length} entries)
-            </h3>
-            <span className="text-[11px] text-neutral-500">
-              Detailed fills & legs
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold">
+                Trade Log ({filteredTrades.length}/{trades.length} entries)
+              </h3>
+              <span className="text-[11px] text-neutral-500">
+                Detailed fills & legs
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <div className="inline-flex rounded-md border border-neutral-800 bg-neutral-900/80 p-1 text-xs">
+                {(["all", "wins", "losses"] as const).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      "px-2 py-1 rounded-sm transition",
+                      filter === key
+                        ? "bg-neutral-800 text-white"
+                        : "text-neutral-400 hover:text-white"
+                    )}
+                  >
+                    {key === "all" ? "All" : key === "wins" ? "Wins" : "Losses"}
+                  </button>
+                ))}
+              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="text-xs">
+                    Sort:{" "}
+                    {sort === "time_asc"
+                      ? "Time ↑"
+                      : sort === "time_desc"
+                      ? "Time ↓"
+                      : sort === "pl_desc"
+                      ? "P/L ↓"
+                      : "P/L ↑"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="text-xs">
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setSort("time_asc")}>
+                    Time ↑
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSort("time_desc")}>
+                    Time ↓
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSort("pl_desc")}>
+                    P/L ↓
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSort("pl_asc")}>
+                    P/L ↑
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => exportCsv(filteredTrades, mode, formattedDate)}
+              >
+                Export CSV
+              </Button>
+            </div>
           </div>
 
           <div className="rounded-xl border border-neutral-800 bg-[#050608] overflow-hidden">
             <div className="overflow-x-auto">
-              <Table className="min-w-[720px]">
-              <TableHeader>
-                <TableRow className="bg-neutral-900/70 border-neutral-800">
-                  <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+              <Table className="min-w-[900px]">
+              <TableHeader className="sticky top-0 z-10">
+                <TableRow className="bg-neutral-900/90 border-neutral-800 backdrop-blur">
+                  <TableHead className="w-[160px] text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     {mode === "week" ? "Date / Time" : "Time"}
                   </TableHead>
-                  <TableHead className="w-[170px] text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <TableHead className="w-[190px] text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     Strategy
                   </TableHead>
-                  <TableHead className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     Legs
                   </TableHead>
-                  <TableHead className="w-[120px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <TableHead className="w-[130px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     Premium
                   </TableHead>
-                  <TableHead className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <TableHead className="w-[120px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     Margin
                   </TableHead>
-                  <TableHead className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  <TableHead className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-300">
                     P/L
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {trades.length === 0 && (
+                {filteredTrades.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={6}
@@ -255,7 +393,7 @@ export function DailyDetailModal({
                   </TableRow>
                 )}
 
-                {trades.map((t, idx) => {
+                {filteredTrades.map((t, idx) => {
                   const time =
                     t.dateOpened != null
                       ? format(
