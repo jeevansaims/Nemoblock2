@@ -32,6 +32,19 @@ export function MonthlyPLCalendar({
   onDayClick,
   maxMarginForPeriod,
 }: MonthlyPLCalendarProps) {
+  const formatCompactUsd = (value: number) => {
+    const abs = Math.abs(value);
+    const sign = value < 0 ? "-" : "";
+    if (abs >= 1_000_000_000_000)
+      return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+    if (abs >= 1_000_000_000)
+      return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000)
+      return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+    return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  };
+
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart);
@@ -126,8 +139,7 @@ export function MonthlyPLCalendar({
                         stats.netPL >= 0 ? "text-emerald-500" : "text-rose-500"
                       )}
                     >
-                      {stats.netPL >= 0 ? "+" : ""}
-                      {Math.round(stats.netPL).toLocaleString()}
+                      {formatCompactUsd(stats.netPL)}
                     </div>
                     
                     {/* Utilization Bar */}

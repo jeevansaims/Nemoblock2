@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -97,63 +93,65 @@ export function DailyDetailModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl w-full border border-neutral-800 bg-[#050506] text-sm p-0 overflow-hidden">
         {/* HEADER */}
-        <header className="px-6 pt-5 pb-4 border-b border-neutral-800 flex items-start justify-between gap-4">
-          <div>
-            <DialogTitle className="text-2xl font-semibold tracking-tight">
-              {formattedDate}
-            </DialogTitle>
-            <p className="mt-1 text-xs text-neutral-400">{subtitle}</p>
-          </div>
+        <header className="px-6 pt-6 pb-4 border-b border-neutral-800">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <DialogTitle className="text-3xl font-semibold tracking-tight text-white">
+                {formattedDate}
+              </DialogTitle>
+              <p className="mt-1 text-xs font-mono uppercase tracking-wide text-neutral-400">
+                {subtitle}
+              </p>
+            </div>
 
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs">
-              <span className="text-neutral-400">Net P/L</span>
-              <span
-                className={cn(
-                  "font-semibold",
-                  netPL >= 0 ? "text-emerald-400" : "text-red-400"
-                )}
-              >
-                {fmtUsd(netPL)}
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-neutral-300">
+                <span className="text-neutral-500">Net P/L</span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    netPL >= 0 ? "text-emerald-400" : "text-red-400"
+                  )}
+                >
+                  {fmtUsd(netPL)}
+                </span>
               </span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs text-neutral-300">
-              <span className="text-neutral-500">Premium</span>
-              <span>{fmtCompactUsd(totalPremium)}</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs text-neutral-300">
-              <span className="text-neutral-500">Margin</span>
-              <span>{fmtCompactUsd(totalMargin)}</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-neutral-300">
+                <span className="text-neutral-500">Premium</span>
+                <span>{fmtCompactUsd(totalPremium)}</span>
+              </span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-neutral-300">
+                <span className="text-neutral-500">Margin</span>
+                <span>{fmtCompactUsd(totalMargin)}</span>
+              </span>
             </div>
           </div>
         </header>
 
         {/* METRIC TILES */}
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 px-6 pt-4 pb-3">
-          <MetricCard label="Net P/L">
-            <span
-              className={cn(
-                "text-lg font-semibold",
-                netPL >= 0 ? "text-emerald-400" : "text-red-400"
-              )}
-            >
-              {fmtCompactUsd(netPL)}
-            </span>
-          </MetricCard>
-
-          <MetricCard label="Trades">
-            <span className="text-lg font-semibold">{tradeCount}</span>
-          </MetricCard>
-
-          <MetricCard label="Win Rate">
-            <span className="text-lg font-semibold">{winRate.toFixed(0)}%</span>
-          </MetricCard>
-
-          <MetricCard label="Max Margin">
-            <span className="text-lg font-semibold">
-              {fmtCompactUsd(maxMargin)}
-            </span>
-          </MetricCard>
+        <section className="grid grid-cols-1 gap-3 px-6 pt-4 pb-3 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricTile
+            label="Net P/L"
+            value={fmtCompactUsd(netPL)}
+            sublabel="Realized P/L"
+            tone={netPL >= 0 ? "positive" : "negative"}
+          />
+          <MetricTile
+            label="Total Trades"
+            value={tradeCount.toString()}
+            sublabel={`${tradeCount} executed`}
+          />
+          <MetricTile
+            label="Win Rate"
+            value={`${winRate.toFixed(0)}%`}
+            sublabel={mode === "week" ? "Weekly win rate" : "Daily win rate"}
+            tone="accent"
+          />
+          <MetricTile
+            label="Max Margin"
+            value={fmtCompactUsd(maxMargin)}
+            sublabel="Peak exposure"
+          />
         </section>
 
         {/* DAILY BREAKDOWN (week mode) */}
@@ -210,26 +208,35 @@ export function DailyDetailModal({
 
         {/* TABLE */}
         <section className="px-6 pb-5 pt-2">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">
+              Trade Log ({trades.length} entries)
+            </h3>
+            <span className="text-[11px] text-neutral-500">
+              Detailed fills & legs
+            </span>
+          </div>
+
           <div className="rounded-xl border border-neutral-800 bg-[#050608] overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-neutral-900/70 border-neutral-800">
-                  <TableHead className="w-[140px] text-xs font-medium text-neutral-400">
+                  <TableHead className="w-[140px] text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     {mode === "week" ? "Date / Time" : "Time"}
                   </TableHead>
-                  <TableHead className="w-[170px] text-xs font-medium text-neutral-400">
+                  <TableHead className="w-[170px] text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     Strategy
                   </TableHead>
-                  <TableHead className="text-xs font-medium text-neutral-400">
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     Legs
                   </TableHead>
-                  <TableHead className="w-[130px] text-right text-xs font-medium text-neutral-400">
+                  <TableHead className="w-[120px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     Premium
                   </TableHead>
-                  <TableHead className="w-[110px] text-right text-xs font-medium text-neutral-400">
+                  <TableHead className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     Margin
                   </TableHead>
-                  <TableHead className="w-[110px] text-right text-xs font-medium text-neutral-400">
+                  <TableHead className="w-[110px] text-right text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
                     P/L
                   </TableHead>
                 </TableRow>
@@ -282,13 +289,19 @@ export function DailyDetailModal({
                       </TableCell>
 
                       {/* Premium */}
-                      <TableCell className="text-right font-mono text-xs tabular-nums text-neutral-200 whitespace-nowrap">
-                        {fmtUsd(t.premium)}
+                      <TableCell
+                        className="text-right font-mono text-xs tabular-nums text-neutral-200 whitespace-nowrap"
+                        title={fmtUsd(t.premium)}
+                      >
+                        {fmtCompactUsd(t.premium)}
                       </TableCell>
 
                       {/* Margin */}
-                      <TableCell className="text-right font-mono text-xs tabular-nums text-neutral-200 whitespace-nowrap">
-                        ${t.margin.toLocaleString()}
+                      <TableCell
+                        className="text-right font-mono text-xs tabular-nums text-neutral-200 whitespace-nowrap"
+                        title={`$${t.margin.toLocaleString()}`}
+                      >
+                        {fmtCompactUsd(t.margin)}
                       </TableCell>
 
                       {/* P/L */}
@@ -297,8 +310,9 @@ export function DailyDetailModal({
                           "text-right font-mono text-xs tabular-nums whitespace-nowrap",
                           t.pl >= 0 ? "text-emerald-400" : "text-red-400"
                         )}
+                        title={fmtUsd(t.pl)}
                       >
-                        {fmtUsd(t.pl)}
+                        {fmtCompactUsd(t.pl)}
                       </TableCell>
                     </TableRow>
                   );
@@ -312,19 +326,35 @@ export function DailyDetailModal({
   );
 }
 
-function MetricCard({
+function MetricTile({
   label,
-  children,
+  value,
+  sublabel,
+  tone = "neutral",
 }: {
   label: string;
-  children: React.ReactNode;
+  value: string;
+  sublabel?: string;
+  tone?: "neutral" | "positive" | "negative" | "accent";
 }) {
+  const toneClass =
+    tone === "positive"
+      ? "text-emerald-400"
+      : tone === "negative"
+      ? "text-red-400"
+      : tone === "accent"
+      ? "text-amber-300"
+      : "text-neutral-100";
+
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3 flex flex-col gap-1">
-      <span className="text-[11px] uppercase tracking-wide text-neutral-400">
+    <div className="rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 flex flex-col gap-1">
+      <span className="text-[11px] font-mono uppercase tracking-[0.15em] text-neutral-400">
         {label}
       </span>
-      {children}
+      <span className={cn("text-2xl font-semibold", toneClass)}>{value}</span>
+      {sublabel && (
+        <span className="text-[11px] text-neutral-500">{sublabel}</span>
+      )}
     </div>
   );
 }

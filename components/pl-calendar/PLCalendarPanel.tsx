@@ -25,6 +25,19 @@ interface PLCalendarPanelProps {
   trades: Trade[];
 }
 
+const formatCompactUsd = (value: number) => {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000)
+    return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+
 interface WeekSummary extends DaySummary {
   endDate: Date;
 }
@@ -321,8 +334,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                 periodStats.netPL >= 0 ? "text-emerald-500" : "text-rose-500"
               )}
             >
-              {periodStats.netPL >= 0 ? "+" : ""}
-              ${periodStats.netPL.toLocaleString()}
+              {formatCompactUsd(periodStats.netPL)}
             </div>
           </CardContent>
         </Card>

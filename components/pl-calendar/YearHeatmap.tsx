@@ -46,8 +46,10 @@ const MONTH_LABELS = [
 function formatCompactPL(value: number): string {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000) return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}K`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return `${sign}$${abs.toFixed(2)}`;
 }
 
@@ -120,30 +122,36 @@ export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
 
                   return (
                     <td key={monthIndex} className="px-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onMonthClick?.(yearRow.year, monthIndex)
-                        }
-                        className={cn(
-                          "flex h-14 w-full flex-col items-center justify-center rounded-xl px-2 transition hover:ring-2 hover:ring-primary/40",
-                          colorClass
-                        )}
-                      >
-                        <div className="font-mono text-xs">
-                          {formatCompactPL(monthSummary.netPL)}
-                        </div>
-                        <div className="mt-0.5 text-[0.65rem] text-zinc-300/80">
-                          {monthSummary.trades}{" "}
-                          {monthSummary.trades === 1 ? "trade" : "trades"}
-                        </div>
-                      </button>
-                    </td>
-                  );
-                })}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onMonthClick?.(yearRow.year, monthIndex)
+                    }
+                    className={cn(
+                      "flex h-14 w-full flex-col items-center justify-center rounded-xl px-2 transition hover:ring-2 hover:ring-primary/40",
+                      colorClass
+                    )}
+                    title={`$${monthSummary.netPL.toLocaleString()} · ${monthSummary.trades} ${
+                      monthSummary.trades === 1 ? "trade" : "trades"
+                    }`}
+                  >
+                    <div className="font-mono text-xs">
+                      {formatCompactPL(monthSummary.netPL)}
+                    </div>
+                    <div className="mt-0.5 text-[0.65rem] text-zinc-300/80">
+                      {monthSummary.trades}{" "}
+                      {monthSummary.trades === 1 ? "trade" : "trades"}
+                    </div>
+                  </button>
+                </td>
+              );
+            })}
 
                 <td className="px-2">
-                  <div className="flex h-14 flex-col items-center justify-center rounded-xl bg-zinc-900 px-2">
+                  <div
+                    className="flex h-14 flex-col items-center justify-center rounded-xl bg-zinc-900 px-2"
+                    title={`$${yearRow.total.netPL.toLocaleString()} · ${yearRow.total.trades} trades`}
+                  >
                     <div className="font-mono text-xs text-zinc-100">
                       {formatCompactPL(yearRow.total.netPL)}
                     </div>
