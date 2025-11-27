@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  IconAdjustmentsHorizontal,
+  IconCalendar,
   IconChartHistogram,
   IconGauge,
   IconLayoutDashboard,
@@ -64,6 +66,12 @@ const navData = {
       icon: IconChartHistogram,
     },
     {
+      title: "P/L Calendar",
+      href: "/pl-calendar",
+      icon: IconCalendar,
+      badge: "New",
+    },
+    {
       title: "Walk-Forward",
       href: "/walk-forward",
       icon: IconTimelineEvent,
@@ -74,6 +82,12 @@ const navData = {
       href: "/comparison-blocks",
       icon: IconLink,
       badge: "Beta",
+    },
+    {
+      title: "TP/SL Optimizer",
+      href: "/tp-optimizer",
+      icon: IconAdjustmentsHorizontal,
+      badge: "Latest",
     },
     {
       title: "NemoBlocks Assistant",
