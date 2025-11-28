@@ -5,9 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { MultiTPOptimizer } from "@/components/tp-optimizer/MultiTPOptimizer";
 import { MissedProfitDashboard } from "@/components/tp-optimizer/MissedProfitDashboard";
 import { StrategyComparison } from "@/components/tp-optimizer/StrategyComparison";
+import { StrategyTPSummaryTable } from "@/components/tp-optimizer/StrategyTPSummaryTable";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
+import { buildStrategyTPSummary } from "@/lib/analytics/strategy-tp-summary";
 import { getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
@@ -80,6 +82,11 @@ export default function TpOptimizerPage() {
     });
   }, [trades]);
 
+  const tpSummaryRows = useMemo(
+    () => buildStrategyTPSummary(missedProfitTrades),
+    [missedProfitTrades]
+  );
+
   if (!activeBlock) {
     return <NoActiveBlock />;
   }
@@ -103,6 +110,7 @@ export default function TpOptimizerPage() {
           <MissedProfitDashboard trades={missedProfitTrades} />
           <MultiTPOptimizer trades={missedProfitTrades} />
           <StrategyComparison trades={missedProfitTrades} />
+          <StrategyTPSummaryTable rows={tpSummaryRows} />
         </div>
       )}
     </WorkspaceShell>

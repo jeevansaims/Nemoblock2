@@ -31,6 +31,8 @@ export interface MissedProfitResult {
     missedDollar: number;
     missedPct: number;
     trades: number;
+    plDollarActual: number;
+    premiumUsedTotal: number;
   }[];
   histogram: { bucket: string; count: number }[];
 }
@@ -67,17 +69,33 @@ export function analyzeMissedProfit(trades: MissedProfitTrade[]): MissedProfitRe
 
   const byStrategyMap = new Map<
     string,
-    { strategy: string; missedDollar: number; missedPct: number; trades: number }
+    {
+      strategy: string;
+      missedDollar: number;
+      missedPct: number;
+      trades: number;
+      plDollarActual: number;
+      premiumUsedTotal: number;
+    }
   >();
   details.forEach((d) => {
     const key = d.trade.strategyName || "Unknown";
     if (!byStrategyMap.has(key)) {
-      byStrategyMap.set(key, { strategy: key, missedDollar: 0, missedPct: 0, trades: 0 });
+      byStrategyMap.set(key, {
+        strategy: key,
+        missedDollar: 0,
+        missedPct: 0,
+        trades: 0,
+        plDollarActual: 0,
+        premiumUsedTotal: 0,
+      });
     }
     const agg = byStrategyMap.get(key)!;
     agg.missedDollar += d.missedDollar;
     agg.missedPct += d.missedPct;
     agg.trades += 1;
+    agg.plDollarActual += d.trade.plDollar || 0;
+    agg.premiumUsedTotal += Math.abs(d.trade.premiumUsed || 0);
   });
 
   const histogram = buildHistogram(details.map((d) => d.missedPct));
