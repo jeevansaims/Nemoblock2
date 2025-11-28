@@ -25,6 +25,13 @@ interface MonthlyPLCalendarProps {
   maxMarginForPeriod: number;
   drawdownThreshold?: number;
   weeklyMode: "trailing7" | "calendarWeek";
+  settings: {
+    showWeeklyBands: boolean;
+    showHeatmap: boolean;
+    showStreaks: boolean;
+    showWeeklyStrategies: boolean;
+    showWeeklySparkline: boolean;
+  };
 }
 
 export function MonthlyPLCalendar({
@@ -35,6 +42,7 @@ export function MonthlyPLCalendar({
   maxMarginForPeriod,
   drawdownThreshold = 10,
   weeklyMode,
+  settings,
 }: MonthlyPLCalendarProps) {
   const formatCompactUsd = (value: number) => {
     const abs = Math.abs(value);
@@ -58,6 +66,7 @@ export function MonthlyPLCalendar({
   };
 
   const getDailyPLClass = (pl: number, absMax: number) => {
+    if (!settings.showHeatmap) return pl >= 0 ? "text-emerald-400" : "text-rose-400";
     if (absMax <= 0) return "";
     const intensity = Math.min(1, Math.abs(pl) / absMax);
     if (pl >= 0) {
@@ -175,7 +184,9 @@ export function MonthlyPLCalendar({
                 ? "weak"
                 : "normal";
             const weekBg =
-              regime === "strong"
+              !settings.showWeeklyBands
+                ? "bg-muted/20"
+                : regime === "strong"
                 ? "bg-emerald-500/5"
                 : regime === "weak"
                 ? "bg-rose-500/5"
@@ -237,7 +248,7 @@ export function MonthlyPLCalendar({
                               {stats.tradeCount}t
                             </span>
                           )}
-                          {stats?.streak && Math.abs(stats.streak) >= 2 && (
+                          {settings.showStreaks && stats?.streak && Math.abs(stats.streak) >= 2 && (
                             <span
                               className={cn(
                                 "text-[10px] font-semibold",
@@ -315,25 +326,25 @@ export function MonthlyPLCalendar({
                       }}
                     />
                   </div>
-                  {topStrategies.length > 0 && (
-                    <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                      {topStrategies.map(([name, info]) => (
-                        <span key={name}>
-                          {name}{" "}
-                          <span className={info.pl >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                {settings.showWeeklyStrategies && topStrategies.length > 0 && (
+                  <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                    {topStrategies.map(([name, info]) => (
+                      <span key={name}>
+                        {name}{" "}
+                        <span className={info.pl >= 0 ? "text-emerald-400" : "text-rose-400"}>
                             {fmtShortUsd(info.pl)}
                           </span>{" "}
                           ({info.trades}t)
                         </span>
                       ))}
                     </div>
-                  )}
-                  {normPoints.length > 0 && (
-                    <svg className="ml-auto h-4 w-24" viewBox="0 0 100 20" preserveAspectRatio="none">
-                      <polyline
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
+                )}
+                {settings.showWeeklySparkline && normPoints.length > 0 && (
+                  <svg className="ml-auto h-4 w-24" viewBox="0 0 100 20" preserveAspectRatio="none">
+                    <polyline
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
                         points={normPoints
                           .map((p, i) => `${(i / Math.max(1, normPoints.length - 1)) * 100},${(1 - p) * 20}`)
                           .join(" ")}

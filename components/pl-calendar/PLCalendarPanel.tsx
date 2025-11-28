@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
+import { defaultPLCalendarSettings } from "@/lib/settings/pl-calendar-settings";
 import { cn } from "@/lib/utils";
 
+import { PLCalendarSettingsMenu } from "./PLCalendarSettingsMenu";
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
@@ -58,6 +60,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     null
   );
   const [weeklyMode, setWeeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
+  const [calendarSettings, setCalendarSettings] = useState(defaultPLCalendarSettings);
 
   const strategies = useMemo(() => {
     const s = new Set<string>();
@@ -612,6 +615,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
               maxMarginForPeriod={maxMarginForMonth}
               drawdownThreshold={drawdownThreshold}
               weeklyMode={weeklyMode}
+              settings={calendarSettings}
             />
 
             {weeklyStats.length > 0 && (
@@ -637,7 +641,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Period snapshot & stress</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Period snapshot & stress</CardTitle>
+            <PLCalendarSettingsMenu
+              settings={calendarSettings}
+              onChange={setCalendarSettings}
+            />
+          </div>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-5">
           <div>
