@@ -1,7 +1,5 @@
 "use client";
 
-import { format } from "date-fns";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -11,7 +9,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { analyzeMissedProfit, MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
+import {
+  analyzeMissedProfit,
+  MissedProfitTrade,
+} from "@/lib/analytics/missed-profit-analyzer";
 
 interface MissedProfitDashboardProps {
   trades: MissedProfitTrade[];
@@ -25,8 +26,9 @@ const fmtUsd = (v: number) =>
 
 export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
   const result = analyzeMissedProfit(trades);
-  // Show trades ordered by largest missed $ first (full list, no top-N limit).
-  const missedTradesSorted = [...result.details].sort(
+
+  // Strategy-level view only: sort all strategies by total missed $
+  const strategiesSorted = [...result.byStrategy].sort(
     (a, b) => b.missedDollar - a.missedDollar
   );
 
@@ -61,88 +63,47 @@ export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Missed Profit by Trade</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Strategy</TableHead>
-                  <TableHead className="text-right">Premium</TableHead>
-                  <TableHead className="text-right">Actual %</TableHead>
-                  <TableHead className="text-right">Max %</TableHead>
-                  <TableHead className="text-right">Missed %</TableHead>
-                  <TableHead className="text-right">Missed $</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {missedTradesSorted.map((row, idx) => (
-                  <TableRow key={row.trade.id ?? idx}>
-                    <TableCell>
-                      {row.trade.openedOn
-                        ? format(new Date(row.trade.openedOn), "MMM d, yyyy")
-                        : "--"}
-                    </TableCell>
-                    <TableCell className="max-w-[220px] truncate">
-                      {row.trade.strategyName || "Unknown"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {fmtUsd(row.trade.premiumUsed)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {row.trade.plPercent.toFixed(1)}%
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {row.trade.maxProfitPct.toFixed(1)}%
-                    </TableCell>
-                    <TableCell className="text-right text-amber-300 font-semibold">
-                      {row.missedPct.toFixed(1)}%
-                    </TableCell>
-                    <TableCell className="text-right text-amber-400 font-semibold">
-                      {fmtUsd(row.missedDollar)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Missed Profit by Strategy (All)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-80 overflow-y-auto">
-            {result.byStrategy
-              .slice()
-              .sort((a, b) => b.missedDollar - a.missedDollar)
-              .map((s) => {
+      <Card>
+        <CardHeader>
+          <CardTitle>Missed Profit by Strategy</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Strategy</TableHead>
+                <TableHead className="text-right">Trades</TableHead>
+                <TableHead className="text-right">Total Missed $</TableHead>
+                <TableHead className="text-right">Avg Missed %</TableHead>
+                <TableHead className="text-right">Total Missed %</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {strategiesSorted.map((s) => {
                 const avgMissedPct = s.trades > 0 ? s.missedPct / s.trades : 0;
 
                 return (
-                  <div
-                    key={s.strategy}
-                    className="flex items-center justify-between text-sm py-1 border-b border-border/10 last:border-b-0"
-                  >
-                    <div className="flex flex-col">
-                      <span className="font-medium">{s.strategy}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {s.trades} trades • {avgMissedPct.toFixed(1)}% avg missed
-                      </span>
-                    </div>
-                    <span className="text-amber-400 font-semibold">
+                  <TableRow key={s.strategy}>
+                    <TableCell className="font-medium">
+                      {s.strategy || "Unknown"}
+                    </TableCell>
+                    <TableCell className="text-right">{s.trades}</TableCell>
+                    <TableCell className="text-right text-amber-400 font-semibold">
                       {fmtUsd(s.missedDollar)}
-                    </span>
-                  </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {avgMissedPct.toFixed(1)}%
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {s.missedPct.toFixed(1)}%
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-          </CardContent>
-        </Card>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
