@@ -6,10 +6,12 @@ import { MultiTPOptimizer } from "@/components/tp-optimizer/MultiTPOptimizer";
 import { MissedProfitDashboard } from "@/components/tp-optimizer/MissedProfitDashboard";
 import { StrategyComparison } from "@/components/tp-optimizer/StrategyComparison";
 import { StrategyTPSummaryTable } from "@/components/tp-optimizer/StrategyTPSummaryTable";
+import { SingleTPStrategyTable } from "@/components/tp-optimizer/SingleTPStrategyTable";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
 import { buildStrategyTPSummary } from "@/lib/analytics/strategy-tp-summary";
+import { computeSingleTPSummary } from "@/lib/analytics/single-tp-sweep";
 import { getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
@@ -87,6 +89,21 @@ export default function TpOptimizerPage() {
     [missedProfitTrades]
   );
 
+  const singleTPSummary = useMemo(
+    () =>
+      computeSingleTPSummary(
+        missedProfitTrades.map((t) => ({
+          id: t.id,
+          strategyName: t.strategyName || "Unknown",
+          premiumUsed: t.premiumUsed,
+          pl: t.plDollar ?? (t.plPercent / 100) * Math.abs(t.premiumUsed || 0),
+          plPercent: t.plPercent,
+          maxProfitPct: t.maxProfitPct,
+        }))
+      ),
+    [missedProfitTrades]
+  );
+
   if (!activeBlock) {
     return <NoActiveBlock />;
   }
@@ -111,6 +128,7 @@ export default function TpOptimizerPage() {
           <MultiTPOptimizer trades={missedProfitTrades} />
           <StrategyComparison trades={missedProfitTrades} />
           <StrategyTPSummaryTable rows={tpSummaryRows} />
+          <SingleTPStrategyTable rows={singleTPSummary} />
         </div>
       )}
     </WorkspaceShell>
