@@ -26,7 +26,19 @@ export function simulateWithdrawals(
   trades: Trade[],
   opts: Options = {}
 ): WithdrawalResult {
-  const startingBalance = opts.startingBalance ?? 100_000;
+  const sortedTrades = [...trades].sort((a, b) => {
+    const da = (a.dateClosed as Date) || (a.dateOpened as Date);
+    const db = (b.dateClosed as Date) || (b.dateOpened as Date);
+    return new Date(da).getTime() - new Date(db).getTime();
+  });
+
+  const inferredStarting =
+    opts.startingBalance ??
+    (sortedTrades.length > 0
+      ? sortedTrades[0].fundsAtClose ?? 100_000
+      : 100_000);
+
+  const startingBalance = inferredStarting;
   const pct = opts.withdrawalPct ?? 0.3;
   const withdrawOnlyIfProfitable = opts.withdrawOnlyIfProfitable ?? true;
   const withdrawalMode = opts.withdrawalMode ?? "percent";
