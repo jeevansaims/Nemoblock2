@@ -39,10 +39,9 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
   const [startingBalance, setStartingBalance] = useState(100000);
   const [withdrawalPct, setWithdrawalPct] = useState(30);
   const [withdrawOnlyIfProfitable, setWithdrawOnlyIfProfitable] = useState(true);
-  const [withdrawalMode, setWithdrawalMode] = useState<"percent" | "fixed">(
-    "percent"
-  );
+  const [withdrawalMode, setWithdrawalMode] = useState<"percent" | "fixed">("percent");
   const [fixedWithdrawal, setFixedWithdrawal] = useState(1000);
+  const [resetMode, setResetMode] = useState(false);
 
   const withdrawalResult = useMemo(
     () =>
@@ -50,10 +49,18 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
         startingBalance,
         withdrawalPct: withdrawalPct / 100,
         withdrawOnlyIfProfitable,
-        withdrawalMode,
+        withdrawalMode: resetMode ? "reset" : withdrawalMode,
         fixedAmount: fixedWithdrawal,
       }),
-    [trades, startingBalance, withdrawalPct, withdrawOnlyIfProfitable, withdrawalMode, fixedWithdrawal]
+    [
+      trades,
+      startingBalance,
+      withdrawalPct,
+      withdrawOnlyIfProfitable,
+      withdrawalMode,
+      fixedWithdrawal,
+      resetMode,
+    ]
   );
 
   const totals = useMemo(() => {
@@ -125,25 +132,39 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
             </div>
             <div className="space-y-2">
               <Label>Withdrawal mode</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
-                  variant={withdrawalMode === "percent" ? "default" : "outline"}
+                  variant={!resetMode && withdrawalMode === "percent" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setWithdrawalMode("percent")}
+                  onClick={() => {
+                    setResetMode(false);
+                    setWithdrawalMode("percent");
+                  }}
                 >
                   Percent
                 </Button>
                 <Button
                   type="button"
-                  variant={withdrawalMode === "fixed" ? "default" : "outline"}
+                  variant={!resetMode && withdrawalMode === "fixed" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setWithdrawalMode("fixed")}
+                  onClick={() => {
+                    setResetMode(false);
+                    setWithdrawalMode("fixed");
+                  }}
                 >
                   Fixed $
                 </Button>
+                <Button
+                  type="button"
+                  variant={resetMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setResetMode(true)}
+                >
+                  Reset to starting balance
+                </Button>
               </div>
-              {withdrawalMode === "percent" ? (
+              {!resetMode && withdrawalMode === "percent" ? (
                 <>
                   <Slider
                     min={0}
@@ -154,12 +175,18 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
                   />
                   <div className="text-sm text-muted-foreground">{withdrawalPct}%</div>
                 </>
-              ) : (
+              ) : null}
+              {!resetMode && withdrawalMode === "fixed" ? (
                 <Input
                   type="number"
                   value={fixedWithdrawal}
                   onChange={(e) => setFixedWithdrawal(Number(e.target.value) || 0)}
                 />
+              ) : null}
+              {resetMode && (
+                <div className="text-sm text-muted-foreground">
+                  At month end, withdraw down to starting balance when above it.
+                </div>
               )}
             </div>
             <div className="space-y-2">
