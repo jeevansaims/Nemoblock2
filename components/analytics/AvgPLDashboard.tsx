@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,10 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
   const [startingBalance, setStartingBalance] = useState(100000);
   const [withdrawalPct, setWithdrawalPct] = useState(30);
   const [withdrawOnlyIfProfitable, setWithdrawOnlyIfProfitable] = useState(true);
+  const [withdrawalMode, setWithdrawalMode] = useState<"percent" | "fixed">(
+    "percent"
+  );
+  const [fixedWithdrawal, setFixedWithdrawal] = useState(1000);
 
   const withdrawalResult = useMemo(
     () =>
@@ -45,8 +50,10 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
         startingBalance,
         withdrawalPct: withdrawalPct / 100,
         withdrawOnlyIfProfitable,
+        withdrawalMode,
+        fixedAmount: fixedWithdrawal,
       }),
-    [trades, startingBalance, withdrawalPct, withdrawOnlyIfProfitable]
+    [trades, startingBalance, withdrawalPct, withdrawOnlyIfProfitable, withdrawalMode, fixedWithdrawal]
   );
 
   const totals = useMemo(() => {
@@ -117,15 +124,43 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Withdrawal %</Label>
-              <Slider
-                min={0}
-                max={100}
-                step={5}
-                value={[withdrawalPct]}
-                onValueChange={([v]) => setWithdrawalPct(v)}
-              />
-              <div className="text-sm text-muted-foreground">{withdrawalPct}%</div>
+              <Label>Withdrawal mode</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={withdrawalMode === "percent" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setWithdrawalMode("percent")}
+                >
+                  Percent
+                </Button>
+                <Button
+                  type="button"
+                  variant={withdrawalMode === "fixed" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setWithdrawalMode("fixed")}
+                >
+                  Fixed $
+                </Button>
+              </div>
+              {withdrawalMode === "percent" ? (
+                <>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[withdrawalPct]}
+                    onValueChange={([v]) => setWithdrawalPct(v)}
+                  />
+                  <div className="text-sm text-muted-foreground">{withdrawalPct}%</div>
+                </>
+              ) : (
+                <Input
+                  type="number"
+                  value={fixedWithdrawal}
+                  onChange={(e) => setFixedWithdrawal(Number(e.target.value) || 0)}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label>Withdraw only if profitable</Label>

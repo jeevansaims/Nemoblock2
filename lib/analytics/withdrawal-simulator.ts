@@ -17,6 +17,8 @@ interface Options {
   startingBalance?: number;
   withdrawalPct?: number; // 0-1
   withdrawOnlyIfProfitable?: boolean;
+  withdrawalMode?: "percent" | "fixed";
+  fixedAmount?: number;
 }
 
 export function simulateWithdrawals(
@@ -26,6 +28,8 @@ export function simulateWithdrawals(
   const startingBalance = opts.startingBalance ?? 100_000;
   const pct = opts.withdrawalPct ?? 0.3;
   const withdrawOnlyIfProfitable = opts.withdrawOnlyIfProfitable ?? true;
+  const withdrawalMode = opts.withdrawalMode ?? "percent";
+  const fixedAmount = opts.fixedAmount ?? 0;
 
   const monthly = getMonthlyPnL(trades);
 
@@ -38,7 +42,11 @@ export function simulateWithdrawals(
   monthly.forEach((m) => {
     const monthPL = m.totalPL;
     const canWithdraw = !withdrawOnlyIfProfitable || monthPL > 0;
-    const withdrawal = canWithdraw ? monthPL * pct : 0;
+    let withdrawal = 0;
+    if (canWithdraw) {
+      withdrawal =
+        withdrawalMode === "fixed" ? Math.max(0, fixedAmount) : monthPL * pct;
+    }
     balance = balance + monthPL - withdrawal;
 
     rows.push({
