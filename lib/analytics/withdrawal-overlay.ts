@@ -85,7 +85,6 @@ export function simulateWithdrawalOverlay(
   const sorted = sortTradesByClosedDate(trades);
 
   let cumulativePL = 0;
-  let totalWithdrawn = 0;
   const equitySeries: EquityPoint[] = [];
   const monthlyPLMap = new Map<string, { year: number; month: number; pl: number }>();
 
@@ -108,8 +107,8 @@ export function simulateWithdrawalOverlay(
       date: d,
       cumulativePL,
       tradingEquity,
-      totalWithdrawn,
-      netEquity: tradingEquity - totalWithdrawn,
+      totalWithdrawn: 0, // withdrawals applied later in seriesWithNet
+      netEquity: tradingEquity,
     });
   });
 
