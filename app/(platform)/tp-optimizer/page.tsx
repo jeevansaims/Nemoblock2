@@ -1,74 +1,104 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 import { MissedProfitDashboard } from "@/components/tp-optimizer/MissedProfitDashboard";
+import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
-
-// TODO: replace this sample data with real trades from CSV upload/store.
-const sampleTrades: MissedProfitTrade[] = [
-  {
-    id: "t1",
-    premiumUsed: 200,
-    plDollar: 100,
-    plPercent: 50,
-    maxProfitPct: 120,
-    maxLossPct: -50,
-    strategyName: "Ric Intraday Swan",
-    openedOn: "2025-11-06",
-  },
-  {
-    id: "t2",
-    premiumUsed: 450,
-    plDollar: -90,
-    plPercent: -20,
-    maxProfitPct: 80,
-    maxLossPct: -60,
-    strategyName: "ORB Bfly",
-    openedOn: "2025-11-05",
-  },
-  {
-    id: "t3",
-    premiumUsed: 350,
-    plDollar: 140,
-    plPercent: 40,
-    maxProfitPct: 140,
-    strategyName: "5/40 VIX Opening",
-    openedOn: "2025-11-04",
-  },
-  {
-    id: "t4",
-    premiumUsed: 275,
-    plDollar: 55,
-    plPercent: 20,
-    maxProfitPct: 90,
-    strategyName: "Ric Intraday Swan",
-    openedOn: "2025-11-03",
-  },
-  {
-    id: "t5",
-    premiumUsed: 180,
-    plDollar: 9,
-    plPercent: 5,
-    maxProfitPct: 60,
-    strategyName: "Calendar Fade",
-    openedOn: "2025-11-02",
-  },
-];
+import { getTradesByBlockWithOptions } from "@/lib/db";
+import { Trade } from "@/lib/models/trade";
+import { useBlockStore } from "@/lib/stores/block-store";
 
 export default function TpOptimizerPage() {
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const activeBlock = useBlockStore((state) => {
+    const activeBlockId = state.activeBlockId;
+    return activeBlockId
+      ? state.blocks.find((block) => block.id === activeBlockId)
+      : null;
+  });
+  const isInitialized = useBlockStore((state) => state.isInitialized);
+  const loadBlocks = useBlockStore((state) => state.loadBlocks);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      loadBlocks().catch(console.error);
+    }
+  }, [isInitialized, loadBlocks]);
+
+  useEffect(() => {
+    async function fetchTrades() {
+      if (!activeBlock) {
+        setTrades([]);
+        return;
+      }
+      setLoading(true);
+      try {
+        const fetched = await getTradesByBlockWithOptions(activeBlock.id);
+        setTrades(fetched);
+      } catch (err) {
+        console.error("Failed to fetch trades for TP/SL optimizer", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchTrades();
+  }, [activeBlock]);
+
+  const missedProfitTrades = useMemo<MissedProfitTrade[]>(() => {
+    return trades.map((t, idx) => {
+      const premiumUsed = Math.abs(t.premium || 0);
+      const plDollar = t.pl || 0;
+      const plPercent =
+        premiumUsed > 0 ? (plDollar / premiumUsed) * 100 : 0;
+      const maxProfitPct =
+        premiumUsed > 0 && typeof t.maxProfit === "number"
+          ? (t.maxProfit / premiumUsed) * 100
+          : 0;
+      const maxLossPct =
+        premiumUsed > 0 && typeof t.maxLoss === "number"
+          ? (t.maxLoss / premiumUsed) * 100
+          : undefined;
+
+      return {
+        id: t.timeOpened ? `${t.dateOpened}-${t.timeOpened}` : idx,
+        premiumUsed,
+        plDollar,
+        plPercent,
+        maxProfitPct,
+        maxLossPct,
+        strategyName: t.strategy,
+        openedOn: t.dateOpened,
+        closedOn: t.dateClosed,
+      };
+    });
+  }, [trades]);
+
+  if (!activeBlock) {
+    return <NoActiveBlock />;
+  }
+
   return (
     <WorkspaceShell
       title="TP/SL Optimizer (MAE/MFE)"
       label="Latest"
       description="Analyze excursion-based exits and missed profit opportunities."
     >
-      <div className="space-y-6">
-        <p className="text-sm text-muted-foreground">
-          This is an early draft using sample data. Wire your trade feed (premium, P/L%, MFE%)
-          into the dashboard to see your missed profit stats by trade and strategy.
-        </p>
-        <MissedProfitDashboard trades={sampleTrades} />
-      </div>
+      {loading ? (
+        <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
+          <p className="text-muted-foreground">Loading trades...</p>
+        </div>
+      ) : missedProfitTrades.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          No trades available for this block yet.
+        </div>
+      ) : (
+        <MissedProfitDashboard trades={missedProfitTrades} />
+      )}
     </WorkspaceShell>
   );
 }
