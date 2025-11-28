@@ -62,7 +62,7 @@ export interface CapitalPathResult {
   startingCapital: number;
   endingCapital: number;
   totalPL: number;
-  maxDrawdownPct: number; // e.g. -0.115 for -11.5%
+  maxDrawdownPct: number; // peak-to-trough percentage drawdown (negative or zero)
   cagrPct: number;
 }
 
