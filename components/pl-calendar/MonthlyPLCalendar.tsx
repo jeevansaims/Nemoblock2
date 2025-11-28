@@ -14,6 +14,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { defaultPLCalendarSettings, PLCalendarSettings } from "@/lib/settings/pl-calendar-settings";
 
 import { DaySummary } from "./DayDetailModal";
 
@@ -25,13 +26,7 @@ interface MonthlyPLCalendarProps {
   maxMarginForPeriod: number;
   drawdownThreshold?: number;
   weeklyMode: "trailing7" | "calendarWeek";
-  settings: {
-    showWeeklyBands: boolean;
-    showHeatmap: boolean;
-    showStreaks: boolean;
-    showWeeklyStrategies: boolean;
-    showWeeklySparkline: boolean;
-  };
+  settings: import("@/lib/settings/pl-calendar-settings").PLCalendarSettings;
 }
 
 export function MonthlyPLCalendar({
@@ -44,6 +39,11 @@ export function MonthlyPLCalendar({
   weeklyMode,
   settings,
 }: MonthlyPLCalendarProps) {
+  const safeSettings: PLCalendarSettings = {
+    ...defaultPLCalendarSettings,
+    ...settings,
+  };
+
   const formatCompactUsd = (value: number) => {
     const abs = Math.abs(value);
     const sign = value < 0 ? "-" : "";
@@ -66,7 +66,7 @@ export function MonthlyPLCalendar({
   };
 
   const getDailyPLClass = (pl: number, absMax: number) => {
-    if (!settings.showHeatmap) return pl >= 0 ? "text-emerald-400" : "text-rose-400";
+    if (!safeSettings.showHeatmap) return pl >= 0 ? "text-emerald-400" : "text-rose-400";
     if (absMax <= 0) return "";
     const intensity = Math.min(1, Math.abs(pl) / absMax);
     if (pl >= 0) {
@@ -184,7 +184,7 @@ export function MonthlyPLCalendar({
                 ? "weak"
                 : "normal";
             const weekBg =
-              !settings.showWeeklyBands
+              !safeSettings.showWeeklyBands
                 ? "bg-muted/20"
                 : regime === "strong"
                 ? "bg-emerald-500/5"
@@ -248,7 +248,7 @@ export function MonthlyPLCalendar({
                               {stats.tradeCount}t
                             </span>
                           )}
-                          {settings.showStreaks && stats?.streak && Math.abs(stats.streak) >= 2 && (
+                          {safeSettings.showStreaks && stats?.streak && Math.abs(stats.streak) >= 2 && (
                             <span
                               className={cn(
                                 "text-[10px] font-semibold",
@@ -326,25 +326,25 @@ export function MonthlyPLCalendar({
                       }}
                     />
                   </div>
-                {settings.showWeeklyStrategies && topStrategies.length > 0 && (
-                  <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                    {topStrategies.map(([name, info]) => (
-                      <span key={name}>
-                        {name}{" "}
-                        <span className={info.pl >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                  {safeSettings.showWeeklyStrategies && topStrategies.length > 0 && (
+                    <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                      {topStrategies.map(([name, info]) => (
+                        <span key={name}>
+                          {name}{" "}
+                          <span className={info.pl >= 0 ? "text-emerald-400" : "text-rose-400"}>
                             {fmtShortUsd(info.pl)}
                           </span>{" "}
                           ({info.trades}t)
                         </span>
                       ))}
                     </div>
-                )}
-                {settings.showWeeklySparkline && normPoints.length > 0 && (
-                  <svg className="ml-auto h-4 w-24" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <polyline
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
+                  )}
+                  {safeSettings.showWeeklySparkline && normPoints.length > 0 && (
+                    <svg className="ml-auto h-4 w-24" viewBox="0 0 100 20" preserveAspectRatio="none">
+                      <polyline
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
                         points={normPoints
                           .map((p, i) => `${(i / Math.max(1, normPoints.length - 1)) * 100},${(1 - p) * 20}`)
                           .join(" ")}
