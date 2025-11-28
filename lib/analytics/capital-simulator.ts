@@ -92,6 +92,7 @@ export function simulateEquityCurve(
 
     if (basisValue <= 0) return;
 
+    // Normalize P/L to a single contract when requested to keep risk sizing consistent.
     const tradePLPerContract = (trade.pl || 0) / contracts;
     const tradeReturnPct = (tradePLPerContract / basisValue) * 100;
     const positionSize = equity * allocationPct;
