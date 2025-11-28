@@ -25,9 +25,9 @@ const fmtUsd = (v: number) =>
 
 export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
   const result = analyzeMissedProfit(trades);
-  const topMissed = [...result.details]
-    .sort((a, b) => b.missedDollar - a.missedDollar)
-    .slice(0, 10);
+  const missedTradesSorted = [...result.details].sort(
+    (a, b) => b.missedDollar - a.missedDollar
+  );
 
   return (
     <div className="space-y-6">
@@ -63,7 +63,7 @@ export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Top 10 Most Missed Trades</CardTitle>
+            <CardTitle>Missed Profit by Trade</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -79,7 +79,7 @@ export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {topMissed.map((row, idx) => (
+                {missedTradesSorted.map((row, idx) => (
                   <TableRow key={row.trade.id ?? idx}>
                     <TableCell>
                       {row.trade.openedOn
@@ -113,20 +113,32 @@ export function MissedProfitDashboard({ trades }: MissedProfitDashboardProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Missed Profit by Strategy</CardTitle>
+            <CardTitle>Missed Profit by Strategy (All)</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {result.byStrategy.slice(0, 6).map((s) => (
-              <div key={s.strategy} className="flex items-center justify-between text-sm">
-                <div className="flex flex-col">
-                  <span className="font-medium">{s.strategy}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {s.trades} trades • {(s.missedPct / s.trades).toFixed(1)}% avg missed
-                  </span>
-                </div>
-                <span className="text-amber-400 font-semibold">{fmtUsd(s.missedDollar)}</span>
-              </div>
-            ))}
+          <CardContent className="space-y-2 max-h-80 overflow-y-auto">
+            {result.byStrategy
+              .slice()
+              .sort((a, b) => b.missedDollar - a.missedDollar)
+              .map((s) => {
+                const avgMissedPct = s.trades > 0 ? s.missedPct / s.trades : 0;
+
+                return (
+                  <div
+                    key={s.strategy}
+                    className="flex items-center justify-between text-sm py-1 border-b border-border/10 last:border-b-0"
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium">{s.strategy}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {s.trades} trades • {avgMissedPct.toFixed(1)}% avg missed
+                      </span>
+                    </div>
+                    <span className="text-amber-400 font-semibold">
+                      {fmtUsd(s.missedDollar)}
+                    </span>
+                  </div>
+                );
+              })}
           </CardContent>
         </Card>
       </div>
