@@ -1,7 +1,7 @@
 "use client";
 
 // PLCalendarPanel: Main component for the P/L Calendar feature
-import { endOfWeek, format, getMonth, getYear, startOfWeek } from "date-fns";
+import { endOfWeek, format, getISOWeek, getISOWeekYear, getMonth, getYear, startOfWeek } from "date-fns";
 import { Download, Filter, Table as TableIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -57,6 +57,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [stressRange, setStressRange] = useState<{ p5: number; p50: number; p95: number } | null>(
     null
   );
+  const [weeklyMode, setWeeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
 
   const strategies = useMemo(() => {
     const s = new Set<string>();
@@ -130,6 +131,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     let peak = 0;
     const rollingWindow: string[] = [];
     const rollingWeeklyMap = new Map<string, number>();
+    const weekMap = new Map<string, number>();
     sortedKeys.forEach((key) => {
       const stat = stats.get(key)!;
       cumulative += stat.netPL;
@@ -152,6 +154,19 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       const rollingSum = rollingWindow.reduce((sum, k) => sum + (stats.get(k)?.netPL ?? 0), 0);
       rollingWeeklyMap.set(key, rollingSum);
       stat.rollingWeeklyPL = rollingSum;
+
+      // calendar week aggregation
+      const d = new Date(key);
+      const weekKey = `${getISOWeekYear(d)}-${getISOWeek(d)}`;
+      weekMap.set(weekKey, (weekMap.get(weekKey) ?? 0) + stat.netPL);
+    });
+
+    // assign calendarWeekPL
+    sortedKeys.forEach((key) => {
+      const stat = stats.get(key)!;
+      const d = new Date(key);
+      const weekKey = `${getISOWeekYear(d)}-${getISOWeek(d)}`;
+      stat.calendarWeekPL = weekMap.get(weekKey) ?? 0;
     });
 
     return stats;
@@ -496,6 +511,25 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             </TabsList>
           </Tabs>
 
+          <div className="inline-flex items-center rounded-full border bg-muted/40 p-1 text-xs">
+            <Button
+              size="sm"
+              variant={weeklyMode === "trailing7" ? "default" : "ghost"}
+              className="h-6 px-3 rounded-full"
+              onClick={() => setWeeklyMode("trailing7")}
+            >
+              7d
+            </Button>
+            <Button
+              size="sm"
+              variant={weeklyMode === "calendarWeek" ? "default" : "ghost"}
+              className="h-6 px-3 rounded-full"
+              onClick={() => setWeeklyMode("calendarWeek")}
+            >
+              Week
+            </Button>
+          </div>
+
           <Select
             value={getYear(currentDate).toString()}
             onValueChange={(val) => {
@@ -566,6 +600,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
               onDayClick={handleDayClick}
               maxMarginForPeriod={maxMarginForMonth}
               drawdownThreshold={drawdownThreshold}
+              weeklyMode={weeklyMode}
             />
 
             {weeklyStats.length > 0 && (

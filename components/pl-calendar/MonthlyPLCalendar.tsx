@@ -24,6 +24,7 @@ interface MonthlyPLCalendarProps {
   onDayClick: (stats: DaySummary) => void;
   maxMarginForPeriod: number;
   drawdownThreshold?: number;
+  weeklyMode: "trailing7" | "calendarWeek";
 }
 
 export function MonthlyPLCalendar({
@@ -33,6 +34,7 @@ export function MonthlyPLCalendar({
   onDayClick,
   maxMarginForPeriod,
   drawdownThreshold = 10,
+  weeklyMode,
 }: MonthlyPLCalendarProps) {
   const formatCompactUsd = (value: number) => {
     const abs = Math.abs(value);
@@ -149,11 +151,14 @@ export function MonthlyPLCalendar({
                       >
                         {formatCompactUsd(stats.netPL)}
                       </div>
-                      {stats.rollingWeeklyPL !== undefined && (
-                        <span className="text-[11px] text-muted-foreground">
-                          7d {formatCompactUsd(stats.rollingWeeklyPL)}
-                        </span>
-                      )}
+                      <span className="text-[11px] text-muted-foreground">
+                        {weeklyMode === "trailing7" ? "7d" : "Wk"}{" "}
+                        {formatCompactUsd(
+                          weeklyMode === "trailing7"
+                            ? stats.rollingWeeklyPL ?? 0
+                            : stats.calendarWeekPL ?? 0
+                        )}
+                      </span>
                     </div>
                     
                     {/* Utilization Bar */}
