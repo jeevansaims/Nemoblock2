@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { MultiTPOptimizer } from "@/components/tp-optimizer/MultiTPOptimizer";
 import { MissedProfitDashboard } from "@/components/tp-optimizer/MissedProfitDashboard";
+import { StrategyComparison } from "@/components/tp-optimizer/StrategyComparison";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
@@ -101,6 +102,7 @@ export default function TpOptimizerPage() {
         <div className="space-y-6">
           <MissedProfitDashboard trades={missedProfitTrades} />
           <MultiTPOptimizer trades={missedProfitTrades} />
+          <StrategyComparison trades={missedProfitTrades} />
         </div>
       )}
     </WorkspaceShell>
