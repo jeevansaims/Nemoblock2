@@ -9,7 +9,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
-import { PLCalendarSettings, PLCalendarSettingKey } from "@/lib/settings/pl-calendar-settings";
+import {
+  PLCalendarSettings,
+  PLCalendarSettingKey,
+  plCalendarPresets,
+} from "@/lib/settings/pl-calendar-settings";
 
 interface PLCalendarSettingsMenuProps {
   settings: PLCalendarSettings;
@@ -32,6 +36,15 @@ export function PLCalendarSettingsMenu({ settings, onChange }: PLCalendarSetting
         <div className="space-y-3">
           <p className="text-sm font-medium">Display Settings</p>
           <p className="text-xs text-muted-foreground">Toggle calendar overlays to A/B test readability.</p>
+
+          <div className="space-y-2 border-b pb-3">
+            <p className="text-xs font-semibold text-muted-foreground">Presets</p>
+            <div className="flex flex-wrap gap-2">
+              <PresetButton label="Minimal" onSelect={() => onChange(plCalendarPresets.minimal)} />
+              <PresetButton label="Focus" onSelect={() => onChange(plCalendarPresets.focus)} />
+              <PresetButton label="Full Nerd" onSelect={() => onChange(plCalendarPresets.fullNerd)} />
+            </div>
+          </div>
 
           <Section
             title="Visual"
@@ -103,5 +116,19 @@ function Section({
         ))}
       </div>
     </div>
+  );
+}
+
+function PresetButton({
+  label,
+  onSelect,
+}: {
+  label: string;
+  onSelect: () => void;
+}) {
+  return (
+    <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={onSelect}>
+      {label}
+    </Button>
   );
 }

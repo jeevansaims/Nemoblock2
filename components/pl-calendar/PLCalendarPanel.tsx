@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
-import { defaultPLCalendarSettings } from "@/lib/settings/pl-calendar-settings";
+import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
 import { cn } from "@/lib/utils";
 
 import { PLCalendarSettingsMenu } from "./PLCalendarSettingsMenu";
@@ -60,7 +60,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     null
   );
   const [weeklyMode, setWeeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
-  const [calendarSettings, setCalendarSettings] = useState(defaultPLCalendarSettings);
+  const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
 
   const strategies = useMemo(() => {
     const s = new Set<string>();
