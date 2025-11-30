@@ -204,9 +204,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       const marginUsed = trade.marginReq || 0;
       const romPct = marginUsed > 0 ? (sizedPL / marginUsed) * 100 : undefined;
       const openedAt = (() => {
-        const [h = "0", m = "0", s = "0"] = (trade.timeOpened || "00:00:00").split(":");
+        const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
+        // Default to noon if no time to avoid TZ shifting the date backwards.
+        const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
+        const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
+        const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
         const dt = new Date(date);
-        dt.setHours(Number(h) || 0, Number(m) || 0, Number(s) || 0, 0);
+        dt.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
         return dt.toISOString();
       })();
       dayStat.trades.push({
