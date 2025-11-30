@@ -233,6 +233,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           winCount: 0,
           lossCount: 0,
           totalPremium: 0,
+          totalMargin: 0,
+          romPct: 0,
         });
       }
 
@@ -242,6 +244,15 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       if (trade.pl > 0) monthStat.winCount += 1;
       if (trade.pl < 0) monthStat.lossCount += 1;
       monthStat.totalPremium += trade.premium || 0;
+      monthStat.totalMargin = (monthStat.totalMargin ?? 0) + (trade.marginReq || 0);
+    });
+
+    // compute monthly ROM
+    stats.forEach((m) => {
+      m.romPct =
+        m.totalMargin && m.totalMargin > 0
+          ? (m.netPL / m.totalMargin) * 100
+          : 0;
     });
 
     return stats;
@@ -249,7 +260,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
   // Aggregate trades by year/month for the heatmap
   const yearlySnapshot = useMemo<YearlyCalendarSnapshot>(() => {
-    const yearMap = new Map<number, Map<number, { netPL: number; trades: number; wins: number }>>();
+    const yearMap = new Map<
+      number,
+      Map<number, { netPL: number; trades: number; wins: number; margin: number }>
+    >();
 
     filteredTrades.forEach((trade) => {
       const date = trade.dateOpened instanceof Date ? trade.dateOpened : new Date(trade.dateOpened);
@@ -258,11 +272,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
       if (!yearMap.has(y)) yearMap.set(y, new Map());
       const monthMap = yearMap.get(y)!;
-      if (!monthMap.has(m)) monthMap.set(m, { netPL: 0, trades: 0, wins: 0 });
+      if (!monthMap.has(m)) monthMap.set(m, { netPL: 0, trades: 0, wins: 0, margin: 0 });
       const entry = monthMap.get(m)!;
       entry.netPL += trade.pl;
       entry.trades += 1;
       if (trade.pl > 0) entry.wins += 1;
+      entry.margin += trade.marginReq || 0;
     });
 
     const years = Array.from(yearMap.entries())
@@ -272,6 +287,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           netPL: vals.netPL,
           trades: vals.trades,
           winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
+          romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
         }));
 
         const total = months.reduce(
@@ -279,9 +295,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             acc.netPL += m.netPL;
             acc.trades += m.trades;
             acc.wins += Math.round((m.winRate / 100) * m.trades);
+            acc.margin += monthsMap.get(m.month)?.margin ?? 0;
             return acc;
           },
-          { netPL: 0, trades: 0, wins: 0 }
+          { netPL: 0, trades: 0, wins: 0, margin: 0 }
         );
 
         return {
@@ -291,6 +308,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             netPL: total.netPL,
             trades: total.trades,
             winRate: total.trades > 0 ? Math.round((total.wins / total.trades) * 100) : 0,
+            romPct: total.margin > 0 ? (total.netPL / total.margin) * 100 : 0,
           },
         };
       })
@@ -673,6 +691,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         ) : (
           <YearHeatmap
             data={yearlySnapshot}
+            metric={heatmapMetric}
             onMonthClick={(year, monthIndex) => {
               const newDate = new Date(currentDate);
               newDate.setFullYear(year);
