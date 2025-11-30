@@ -37,6 +37,9 @@ import { PLCalendarSettingsMenu } from "./PLCalendarSettingsMenu";
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
+import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
+import { StrategyCorrelationMatrix } from "./StrategyCorrelationMatrix";
+import { RomTrendChart } from "./RomTrendChart";
 import { MonthStats } from "./YearlyPLTable";
 
 interface PLCalendarPanelProps {
@@ -68,9 +71,46 @@ const getSizedPL = (trade: Trade, sizingMode: SizingMode) => {
   return trade.pl / lots;
 };
 
+const computePearson = (a: number[], b: number[]) => {
+  if (a.length !== b.length || a.length === 0) return 0;
+  const n = a.length;
+  const meanA = a.reduce((s, v) => s + v, 0) / n;
+  const meanB = b.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let denomA = 0;
+  let denomB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - meanA;
+    const db = b[i] - meanB;
+    num += da * db;
+    denomA += da * da;
+    denomB += db * db;
+  }
+  const denom = Math.sqrt(denomA * denomB);
+  if (denom === 0) return 0;
+  return num / denom;
+};
+
+const classifyRegime = (netPL: number, romPct: number | undefined): MarketRegime => {
+  if (romPct !== undefined && romPct > 8) return "TREND_UP";
+  if (romPct !== undefined && romPct < -8) return "TREND_DOWN";
+  if (netPL > 0) return "TREND_UP";
+  if (netPL < 0) return "TREND_DOWN";
+  return "CHOPPY";
+};
+
 interface WeekSummary extends DaySummary {
   endDate: Date;
+  dominantRegime?: MarketRegime;
+  regimeCounts?: Partial<Record<MarketRegime, number>>;
 }
+
+type MarketRegime =
+  | "TREND_UP"
+  | "TREND_DOWN"
+  | "CHOPPY"
+  | "HIGH_IV"
+  | "LOW_IV";
 
 type SizingMode = "actual" | "normalized";
 
@@ -234,6 +274,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         currentStreak = 0;
       }
       stat.streak = currentStreak;
+      stat.regime = classifyRegime(stat.netPL, stat.romPct);
     });
 
     // assign calendarWeekPL
@@ -502,11 +543,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       weekStat.winCount += stat.winCount;
       weekStat.maxMargin = Math.max(weekStat.maxMargin, stat.maxMargin);
       weekStat.marginUsed = (weekStat.marginUsed || 0) + (stat.marginUsed || 0);
-      weekStat.trades.push(...stat.trades);
-      weekStat.dailyBreakdown?.push({
-        date: stat.date,
-        netPL: stat.netPL,
-        tradeCount: stat.tradeCount,
+        weekStat.trades.push(...stat.trades);
+        weekStat.dailyBreakdown?.push({
+          date: stat.date,
+          netPL: stat.netPL,
+          tradeCount: stat.tradeCount,
         winRate:
           stat.tradeCount > 0
             ? Math.round((stat.winCount / stat.tradeCount) * 100)
@@ -514,6 +555,14 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         premium: stat.trades.reduce((sum, t) => sum + (t.premium || 0), 0),
         margin: stat.trades.reduce((sum, t) => sum + (t.margin || 0), 0),
       });
+      if (stat.regime) {
+        weekStat.regime =
+          weekStat.regime ??
+          stat.regime; // set a default; we will finalize later with dominant regime
+        weekStat.regimeCounts = weekStat.regimeCounts || {};
+        const key = stat.regime as MarketRegime;
+        weekStat.regimeCounts[key] = (weekStat.regimeCounts[key] || 0) + 1;
+      }
     });
 
     weeks.forEach((week) => {
@@ -525,6 +574,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         (week.marginUsed ?? 0) > 0
           ? (week.netPL / (week.marginUsed as number)) * 100
           : 0;
+      if (week.regimeCounts) {
+        const entries = Object.entries(week.regimeCounts);
+        if (entries.length > 0) {
+          const dominant = entries.sort((a, b) => b[1] - a[1])[0][0];
+          week.dominantRegime = dominant as MarketRegime;
+        }
+      }
     });
 
     return Array.from(weeks.values()).sort(
@@ -543,6 +599,101 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     setModalMode("week");
     setIsModalOpen(true);
   };
+
+  const weekdayAlpha = useMemo(() => {
+    const buckets = new Map<number, { pl: number; margin: number; wins: number; losses: number; trades: number }>();
+    filteredTrades.forEach((t) => {
+      const date = t.dateOpened instanceof Date ? t.dateOpened : new Date(t.dateOpened);
+      const day = date.getDay();
+      const pl = getSizedPL(t, sizingMode);
+      const margin = t.marginReq ?? 0;
+      const bucket = buckets.get(day) || { pl: 0, margin: 0, wins: 0, losses: 0, trades: 0 };
+      bucket.pl += pl;
+      bucket.margin += Math.max(0, margin);
+      if (pl > 0) bucket.wins += 1;
+      if (pl < 0) bucket.losses += 1;
+      bucket.trades += 1;
+      buckets.set(day, bucket);
+    });
+    const ordered = [1, 2, 3, 4, 5].map((d) => {
+      const b = buckets.get(d) || { pl: 0, margin: 0, wins: 0, losses: 0, trades: 0 };
+      const winRate = b.trades > 0 ? (b.wins / b.trades) * 100 : 0;
+      const rom = b.margin > 0 ? (b.pl / b.margin) * 100 : 0;
+      return { weekday: d, ...b, winRate, romPct: rom };
+    });
+    return ordered;
+  }, [filteredTrades, sizingMode]);
+
+  const strategyCorr = useMemo(() => {
+    // build per-strategy daily PL map keyed by date
+    const byStrategy = new Map<string, Map<string, number>>();
+    filteredTrades.forEach((t) => {
+      const date = format(
+        t.dateOpened instanceof Date ? t.dateOpened : new Date(t.dateOpened),
+        "yyyy-MM-dd"
+      );
+      const strategy = t.strategy || "Custom";
+      const pl = getSizedPL(t, sizingMode);
+      if (!byStrategy.has(strategy)) byStrategy.set(strategy, new Map());
+      const m = byStrategy.get(strategy)!;
+      m.set(date, (m.get(date) ?? 0) + pl);
+    });
+
+    const strategiesList = Array.from(byStrategy.keys());
+    const allDates = new Set<string>();
+    byStrategy.forEach((m) => m.forEach((_, d) => allDates.add(d)));
+    const dates = Array.from(allDates).sort();
+
+    const series: Record<string, number[]> = {};
+    strategiesList.forEach((s) => {
+      const m = byStrategy.get(s)!;
+      series[s] = dates.map((d) => m.get(d) ?? 0);
+    });
+
+    const corrList: { a: string; b: string; corr: number }[] = [];
+    for (let i = 0; i < strategiesList.length; i++) {
+      for (let j = i; j < strategiesList.length; j++) {
+        const a = strategiesList[i];
+        const b = strategiesList[j];
+        const arrA = series[a];
+        const arrB = series[b];
+        const corr = computePearson(arrA, arrB);
+        corrList.push({ a, b, corr });
+      }
+    }
+    return { strategies: strategiesList, correlations: corrList };
+  }, [filteredTrades, sizingMode]);
+
+  const romTrend = useMemo(() => {
+    if (heatmapMetric !== "rom") return null;
+    const days: { date: string; pl: number; margin: number }[] = [];
+    dailyStats.forEach((stat, key) => {
+      if (format(stat.date, "yyyy") === format(currentDate, "yyyy")) {
+        days.push({
+          date: key,
+          pl: stat.netPL,
+          margin: stat.marginUsed ?? 0,
+        });
+      }
+    });
+    const sorted = days.sort((a, b) => a.date.localeCompare(b.date));
+    const computeRolling = (window: number) => {
+      const res: { date: string; romPct: number }[] = [];
+      for (let i = 0; i < sorted.length; i++) {
+        if (i + 1 < window) continue;
+        const slice = sorted.slice(i + 1 - window, i + 1);
+        const sumPl = slice.reduce((s, d) => s + d.pl, 0);
+        const sumMargin = slice.reduce((s, d) => s + Math.max(0, d.margin), 0);
+        const rom = sumMargin > 0 ? (sumPl / sumMargin) * 100 : 0;
+        res.push({ date: sorted[i].date, romPct: rom });
+      }
+      return res;
+    };
+    return {
+      rolling7: computeRolling(7),
+      rolling14: computeRolling(14),
+    };
+  }, [dailyStats, currentDate, heatmapMetric]);
 
   const years = useMemo(() => {
     const yearsSet = new Set<number>();
@@ -745,19 +896,41 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                 onWeekClick={handleWeekClick}
               />
             )}
+
+            <WeekdayAlphaMap stats={weekdayAlpha} sizingMode={sizingMode} />
+
+            <StrategyCorrelationMatrix
+              trades={strategyCorr}
+              sizingMode={sizingMode}
+              metric={heatmapMetric}
+            />
           </div>
         ) : (
-          <YearHeatmap
-            data={yearlySnapshot}
-            metric={heatmapMetric}
-            onMonthClick={(year, monthIndex) => {
-              const newDate = new Date(currentDate);
-              newDate.setFullYear(year);
-              newDate.setMonth(monthIndex);
-              setCurrentDate(newDate);
-              setView("month");
-            }}
-          />
+          <div className="space-y-4">
+            <YearHeatmap
+              data={yearlySnapshot}
+              metric={heatmapMetric}
+              onMonthClick={(year, monthIndex) => {
+                const newDate = new Date(currentDate);
+                newDate.setFullYear(year);
+                newDate.setMonth(monthIndex);
+                setCurrentDate(newDate);
+                setView("month");
+              }}
+            />
+            {heatmapMetric === "rom" && romTrend?.rolling7.length ? (
+              <RomTrendChart
+                series={romTrend.rolling7}
+                label="Rolling 7-day ROM%"
+              />
+            ) : null}
+            {heatmapMetric === "rom" && romTrend?.rolling14.length ? (
+              <RomTrendChart
+                series={romTrend.rolling14}
+                label="Rolling 14-day ROM%"
+              />
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -870,11 +1043,17 @@ function WeeklySummaryGrid({
                   {week.netPL >= 0 ? "+" : "-"}
                   {formatCompactUsd(Math.abs(week.netPL))}
                 </span>
-            </div>
+              </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/80">
-              <div className="rounded-lg bg-black/20 px-3 py-2">
-                <div className="text-[10px] uppercase tracking-wide text-white/50">Trades</div>
+              {week.dominantRegime && (
+                <div className="mt-1 text-[11px] text-white/70">
+                  Regime: {week.dominantRegime.replaceAll("_", " ")}
+                </div>
+              )}
+
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-white/80">
+                <div className="rounded-lg bg-black/20 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-wide text-white/50">Trades</div>
                   <div className="text-sm font-semibold">{week.tradeCount}</div>
                 </div>
                 <div className="rounded-lg bg-black/20 px-3 py-2">

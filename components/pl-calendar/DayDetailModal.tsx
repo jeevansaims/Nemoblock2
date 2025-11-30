@@ -49,6 +49,7 @@ export interface DaySummary {
   streak?: number;
   marginUsed?: number;
   romPct?: number;
+  regime?: string;
   // Optional breakout by day (used when showing a week)
   dailyBreakdown?: {
     date: Date;
