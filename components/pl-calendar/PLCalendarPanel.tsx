@@ -2,18 +2,32 @@
 
 // PLCalendarPanel: Main component for the P/L Calendar feature
 import { endOfWeek, format, getISOWeek, getISOWeekYear, getMonth, getYear, startOfWeek } from "date-fns";
-import { Download, Filter, Table as TableIcon } from "lucide-react";
+import { Check, ChevronDown, Download, Filter, Table as TableIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
 import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
@@ -54,7 +68,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   );
   const [modalMode, setModalMode] = useState<"day" | "week">("day");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedStrategy, setSelectedStrategy] = useState<string>("all");
+  const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [drawdownThreshold, setDrawdownThreshold] = useState(10);
   const [stressRange, setStressRange] = useState<{ p5: number; p50: number; p95: number } | null>(
     null
@@ -69,13 +83,15 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       if (t.strategy) s.add(t.strategy);
       else s.add("Custom");
     });
-    return ["all", ...Array.from(s).sort()];
+    return Array.from(s).sort();
   }, [trades]);
 
   const filteredTrades = useMemo(() => {
-    if (selectedStrategy === "all") return trades;
-    return trades.filter((t) => (t.strategy || "Custom") === selectedStrategy);
-  }, [trades, selectedStrategy]);
+    if (selectedStrategies.length === 0) return trades;
+    return trades.filter((t) =>
+      selectedStrategies.includes(t.strategy || "Custom")
+    );
+  }, [trades, selectedStrategies]);
 
   // Aggregate trades by day
   // This useMemo calculates daily stats including win/loss counts and rolling metrics
@@ -601,18 +617,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedStrategy} onValueChange={setSelectedStrategy}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Strategy" />
-              </SelectTrigger>
-              <SelectContent>
-                {strategies.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s === "all" ? "All strategies" : s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StrategyMultiSelect
+              strategies={strategies}
+              value={selectedStrategies}
+              onChange={setSelectedStrategies}
+            />
           </div>
 
           <div className="flex items-center gap-2">
@@ -826,5 +835,90 @@ function WeeklySummaryGrid({
       })}
     </div>
     </div>
+  );
+}
+
+function StrategyMultiSelect({
+  strategies,
+  value,
+  onChange,
+}: {
+  strategies: string[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const summaryText =
+    value.length === 0
+      ? "All strategies"
+      : value.length === 1
+      ? value[0]
+      : `${value.length} strategies`;
+
+  const toggleStrategy = (name: string) => {
+    if (value.includes(name)) {
+      const next = value.filter((s) => s !== name);
+      onChange(next.length === 0 ? [] : next);
+    } else {
+      onChange([...value, name]);
+    }
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-[240px] justify-between text-left"
+        >
+          <span className="truncate">{summaryText}</span>
+          <div className="flex items-center gap-1">
+            {value.length > 1 && (
+              <Badge variant="secondary" className="text-[11px]">
+                {value.length}
+              </Badge>
+            )}
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search strategies..." />
+          <CommandList>
+            <CommandGroup heading="All">
+              <CommandItem
+                onSelect={() => onChange([])}
+                className="flex items-center gap-2"
+              >
+                <Checkbox checked={value.length === 0} />
+                <span>All strategies</span>
+                {value.length === 0 && (
+                  <Check className="ml-auto h-4 w-4 text-primary" />
+                )}
+              </CommandItem>
+            </CommandGroup>
+            <CommandGroup heading="Strategies">
+              {strategies.map((s) => {
+                const isChecked = value.includes(s);
+                return (
+                  <CommandItem
+                    key={s}
+                    onSelect={() => toggleStrategy(s)}
+                    className="flex items-center gap-2"
+                  >
+                    <Checkbox checked={isChecked} />
+                    <span className="truncate">{s}</span>
+                    {isChecked && (
+                      <Check className="ml-auto h-4 w-4 text-primary" />
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

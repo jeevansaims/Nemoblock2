@@ -247,7 +247,7 @@ export function MonthlyPLCalendar({
               >
                 <div className="grid grid-cols-7 gap-[1px]">
                   {week.map((entry) => {
-                    const { day, stats, isCurrentMonth, isDrawdown, utilization } = entry;
+                    const { day, stats, isCurrentMonth, utilization } = entry;
                     const metricValue =
                       heatmapMetric === "rom"
                         ? stats?.romPct ?? 0
@@ -259,8 +259,7 @@ export function MonthlyPLCalendar({
                         className={cn(
                           "relative flex min-h-[100px] flex-col justify-between bg-background p-2 transition-colors hover:bg-muted/50",
                           !isCurrentMonth && "bg-muted/5 text-muted-foreground",
-                          stats && "cursor-pointer",
-                          isDrawdown && "ring-2 ring-rose-500/60"
+                          stats && "cursor-pointer"
                         )}
                       >
                         <div className="flex items-start justify-between">
