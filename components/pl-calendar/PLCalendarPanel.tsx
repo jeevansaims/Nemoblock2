@@ -514,8 +514,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     filteredTrades.forEach((t) => {
       totalPL += sizedPLMap.get(t) ?? t.pl;
     });
-    const meanPL = filteredTrades.length > 0 ? totalPL / filteredTrades.length : 0;
-    return { meanPL };
+    return { totalPL };
   }, [filteredTrades, sizingMode, kellyFraction]);
 
   // Calculate max margin for the current month to scale utilization bars
@@ -773,7 +772,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Mean P/L (All Data)
+              Net P/L (All Data)
             </CardTitle>
             <span className="text-muted-foreground">$</span>
           </CardHeader>
@@ -781,10 +780,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             <div
               className={cn(
                 "text-2xl font-bold",
-                allDataStats.meanPL >= 0 ? "text-emerald-500" : "text-rose-500"
+                allDataStats.totalPL >= 0 ? "text-emerald-500" : "text-rose-500"
               )}
             >
-              {formatCompactUsd(allDataStats.meanPL)}
+              {formatCompactUsd(allDataStats.totalPL)}
             </div>
           </CardContent>
         </Card>
