@@ -274,11 +274,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      // Handle dateOpened which might be a Date object or string
-      const date = trade.dateOpened instanceof Date 
-        ? trade.dateOpened 
-        : new Date(trade.dateOpened);
-        
+      const date = normalizeTradeDate(trade);
       const dateKey = format(date, "yyyy-MM-dd");
 
       if (!stats.has(dateKey)) {
@@ -405,9 +401,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = trade.dateOpened instanceof Date 
-        ? trade.dateOpened 
-        : new Date(trade.dateOpened);
+      const date = normalizeTradeDate(trade);
         
       if (getYear(date) !== year) return;
 
@@ -456,7 +450,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = trade.dateOpened instanceof Date ? trade.dateOpened : new Date(trade.dateOpened);
+      const date = normalizeTradeDate(trade);
       const y = getYear(date);
       const m = getMonth(date);
 
