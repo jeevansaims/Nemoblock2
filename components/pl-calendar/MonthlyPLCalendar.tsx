@@ -83,7 +83,8 @@ export function MonthlyPLCalendar({
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(monthStart);
-  const startDate = startOfWeek(monthStart);
+  // Align calendar grid to Sunday start to match the visual header.
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
   const endDate = endOfWeek(monthEnd);
 
   const calendarDays = eachDayOfInterval({
