@@ -142,7 +142,8 @@ const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
 const computeSizedPLMap = (
   trades: Trade[],
   sizingMode: SizingMode,
-  baseEquity: number
+  baseEquity: number,
+  kellyFraction: number
 ): Map<Trade, number> => {
   const map = new Map<Trade, number>();
   if (sizingMode === "actual" || sizingMode === "normalized") {
@@ -167,7 +168,7 @@ const computeSizedPLMap = (
     const lots = getTradeLots(t);
     const perLotPL = lots > 0 ? t.pl / lots : t.pl;
     const marginPerLot = lots > 0 ? (t.marginReq || 0) / lots : t.marginReq || 0;
-    const kBase = fractions.get(t.strategy || "Custom") ?? 0;
+    const kBase = kellyFraction > 0 ? kellyFraction : fractions.get(t.strategy || "Custom") ?? 0;
     const k =
       sizingMode === "kelly"
         ? kBase
@@ -215,6 +216,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [weeklyMode, setWeeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
   const [heatmapMetric, setHeatmapMetric] = useState<"pl" | "rom">("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
+  const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
   const [showRomTrendPanel] = useState(true);
 
@@ -246,6 +248,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     ) {
       setSizingMode(saved);
     }
+    const savedKelly = window.localStorage.getItem("plCalendarKellyPct");
+    if (savedKelly) {
+      const pct = Number(savedKelly);
+      if (!isNaN(pct) && pct > 0 && pct <= 100) {
+        setKellyFraction(pct / 100);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -253,11 +262,16 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     window.localStorage.setItem("plCalendarSizingMode", sizingMode);
   }, [sizingMode]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("plCalendarKellyPct", String(Math.round(kellyFraction * 100)));
+  }, [kellyFraction]);
+
   // Aggregate trades by day
   // This useMemo calculates daily stats including win/loss counts and rolling metrics
   const dailyStats = useMemo(() => {
     const stats = new Map<string, DaySummary>();
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY);
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
       // Handle dateOpened which might be a Date object or string
@@ -382,13 +396,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     });
 
     return stats;
-  }, [filteredTrades, sizingMode]);
+  }, [filteredTrades, sizingMode, kellyFraction]);
 
   // Aggregate trades by month for the current year
   const monthlyStats = useMemo(() => {
     const stats = new Map<number, MonthStats>();
     const year = getYear(currentDate);
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY);
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
       const date = trade.dateOpened instanceof Date 
@@ -431,7 +445,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     });
 
     return stats;
-  }, [filteredTrades, currentDate, sizingMode]);
+  }, [filteredTrades, currentDate, sizingMode, kellyFraction]);
 
   // Aggregate trades by year/month for the heatmap
   const yearlySnapshot = useMemo<YearlyCalendarSnapshot>(() => {
@@ -439,7 +453,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       number,
       Map<number, { netPL: number; trades: number; wins: number; margin: number }>
     >();
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY);
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
       const date = trade.dateOpened instanceof Date ? trade.dateOpened : new Date(trade.dateOpened);
@@ -492,7 +506,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       .sort((a, b) => b.year - a.year);
 
     return { years };
-  }, [filteredTrades, sizingMode]);
+  }, [filteredTrades, sizingMode, kellyFraction]);
 
   // Calculate max margin for the current month to scale utilization bars
   const maxMarginForMonth = useMemo(() => {
@@ -872,6 +886,25 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             >
               1/2 Kelly
             </Button>
+            {sizingMode === "kelly" || sizingMode === "halfKelly" ? (
+              <div className="flex items-center gap-1 pl-2">
+                <span className="text-[11px] text-muted-foreground">k =</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={Math.round(kellyFraction * 100)}
+                  onChange={(e) => {
+                    const raw = Number(e.target.value || 0);
+                    const clamped = Math.min(100, Math.max(1, raw));
+                    setKellyFraction(clamped / 100);
+                  }}
+                  className="w-16 rounded-md border bg-background px-2 py-1 text-[11px] text-right"
+                />
+                <span className="text-[11px] text-muted-foreground">%</span>
+              </div>
+            ) : null}
           </div>
 
           <Select
