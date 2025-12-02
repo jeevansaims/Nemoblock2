@@ -3,6 +3,7 @@
 // PLCalendarPanel: Main component for the P/L Calendar feature
 // Note: sizingMode now supports Kelly / Half-Kelly; keep this file as the single source of truth for sizing logic.
 import { endOfWeek, format, getISOWeek, getISOWeekYear, getMonth, getYear, startOfWeek } from "date-fns";
+import { utcToZonedTime } from "date-fns-tz";
 import { Check, ChevronDown, Download, Filter, Table as TableIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -153,7 +154,9 @@ const getTradingDateKey = (trade: Trade): string => {
   // Build a local anchor at midday to avoid backward shifts.
   base.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
 
-  return format(base, "yyyy-MM-dd"); // local calendar day
+  // Normalize to market timezone (ET) before extracting the calendar day to avoid TZ drift.
+  const zoned = utcToZonedTime(base, "America/New_York");
+  return format(zoned, "yyyy-MM-dd");
 };
 
 const computeSizedPLMap = (
