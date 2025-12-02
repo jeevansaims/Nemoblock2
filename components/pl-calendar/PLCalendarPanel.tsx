@@ -150,15 +150,8 @@ const getTradingDateKey = (trade: Trade): string => {
   const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
   const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
   const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
-  // Build a local anchor at midday to avoid backward shifts, then normalize weekends to Friday.
+  // Build a local anchor at midday to avoid backward shifts.
   base.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
-
-  const dow = base.getDay(); // 0 = Sun, 6 = Sat
-  if (dow === 0) {
-    base.setDate(base.getDate() - 2);
-  } else if (dow === 6) {
-    base.setDate(base.getDate() - 1);
-  }
 
   return format(base, "yyyy-MM-dd"); // local calendar day
 };
