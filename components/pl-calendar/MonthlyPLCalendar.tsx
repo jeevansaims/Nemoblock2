@@ -22,7 +22,7 @@ interface MonthlyPLCalendarProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
   dailyStats: Map<string, DaySummary>;
-  onDayClick: (stats: DaySummary) => void;
+  onDayClick: (dayKey: string) => void;
   maxMarginForPeriod: number;
   drawdownThreshold?: number;
   weeklyMode: "trailing7" | "calendarWeek";
@@ -254,15 +254,15 @@ export function MonthlyPLCalendar({
               >
                 <div className="grid grid-cols-5 gap-[1px]">
                   {filteredWeek.map((entry) => {
-                    const { day, stats, isCurrentMonth, utilization } = entry;
+                    const { day, dateKey, stats, isCurrentMonth, utilization } = entry;
                     const metricValue =
                       heatmapMetric === "rom"
                         ? stats?.romPct ?? 0
                         : stats?.netPL ?? 0;
                     return (
                       <div
-                        key={day.toString()}
-                        onClick={() => stats && onDayClick(stats)}
+                        key={dateKey || day.toString()}
+                        onClick={() => stats && onDayClick(dateKey)}
                         className={cn(
                           "relative flex min-h-[100px] flex-col justify-between bg-background p-2 transition-colors hover:bg-muted/50",
                           !isCurrentMonth && "bg-muted/5 text-muted-foreground",

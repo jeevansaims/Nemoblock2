@@ -3,7 +3,6 @@
 // PLCalendarPanel: Main component for the P/L Calendar feature
 // Note: sizingMode now supports Kelly / Half-Kelly; keep this file as the single source of truth for sizing logic.
 import { endOfWeek, format, getISOWeek, getISOWeekYear, getMonth, getYear, parseISO, startOfWeek } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
 import { Check, ChevronDown, Download, Filter, Table as TableIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -34,6 +33,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
 import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
 import { cn } from "@/lib/utils";
+import { getTradingDayKey } from "@/lib/utils/trading-day";
 
 import { PLCalendarSettingsMenu } from "./PLCalendarSettingsMenu";
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
@@ -141,20 +141,10 @@ const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
   return fractions;
 };
 
-// Trading-day key helper: always returns a pure yyyy-MM-dd string in market TZ (America/New_York).
-const getTradingDateKey = (trade: Trade): string => {
-  const rawDate = trade.dateOpened as Date;
-  const base =
-    rawDate instanceof Date ? new Date(rawDate.getTime()) : new Date(rawDate);
-  const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
-  const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
-  const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
-  const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
-  base.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
-
-  // Normalize to market timezone (ET) before extracting the calendar day to avoid TZ drift.
-  const zoned = toZonedTime(base, "America/New_York");
-  return format(zoned, "yyyy-MM-dd");
+// Trading-day key helper: prefer the stored dayKey, fall back to canonical ET resolver.
+const resolveDayKey = (trade: Trade): string => {
+  if (trade.dayKey && trade.dayKey !== "1970-01-01") return trade.dayKey;
+  return getTradingDayKey(trade.dateOpened, trade.timeOpened);
 };
 
 const computeSizedPLMap = (
@@ -221,7 +211,8 @@ type MarketRegime =
 export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "year">("month");
-  const [selectedDayStats, setSelectedDayStats] = useState<DaySummary | null>(
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [selectedWeekStats, setSelectedWeekStats] = useState<WeekSummary | null>(
     null
   );
   const [modalMode, setModalMode] = useState<"day" | "week">("day");
@@ -253,6 +244,17 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       selectedStrategies.includes(t.strategy || "Custom")
     );
   }, [trades, selectedStrategies]);
+
+  const tradesByDay = useMemo(() => {
+    const map = new Map<string, Trade[]>();
+    filteredTrades.forEach((t) => {
+      const key = resolveDayKey(t);
+      if (!key || key === "1970-01-01") return;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return map;
+  }, [filteredTrades]);
 
   // Persist sizing mode
   useEffect(() => {
@@ -291,9 +293,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const stats = new Map<string, DaySummary>();
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
-    filteredTrades.forEach((trade) => {
-      const dateKey = getTradingDateKey(trade);
-      // Use pure dayKey for identity; derive a display Date via parseISO.
+    tradesByDay.forEach((dayTrades, dateKey) => {
+      if (!dateKey || dateKey === "1970-01-01") return;
       const date = parseISO(dateKey);
 
       if (!stats.has(dateKey)) {
@@ -312,37 +313,40 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       }
 
       const dayStat = stats.get(dateKey)!;
-      const sizedPL = sizedPLMap.get(trade) ?? trade.pl;
-      dayStat.netPL += sizedPL;
-      dayStat.tradeCount += 1;
-      if (trade.pl > 0) dayStat.winCount += 1;
-      dayStat.maxMargin = Math.max(dayStat.maxMargin, trade.marginReq || 0);
-      dayStat.marginUsed = (dayStat.marginUsed ?? 0) + (trade.marginReq || 0);
-      
-      // Map Trade to DailyTrade, keeping the actual opened timestamp (date + time).
-      const marginUsed = trade.marginReq || 0;
-      const romPct = marginUsed > 0 ? (sizedPL / marginUsed) * 100 : undefined;
-      const openedAt = (() => {
-        const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
-        // Default to noon if no time to avoid TZ shifting the date backwards.
-        const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
-        const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
-        const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
-        // Build a local timestamp string (no Z) to avoid timezone shifts when rendering
-        const hh = String(isNaN(h) ? 12 : h).padStart(2, "0");
-        const mm = String(isNaN(m) ? 0 : m).padStart(2, "0");
-        const ss = String(isNaN(s) ? 0 : s).padStart(2, "0");
-        return `${dateKey}T${hh}:${mm}:${ss}`;
-      })();
-      dayStat.trades.push({
-        id: undefined, // Trade model doesn't have ID
-        dateOpened: openedAt,
-        strategy: trade.strategy || "Custom",
-        legs: trade.legs || "",
-        premium: trade.premium || 0,
-        margin: marginUsed,
-        pl: sizedPL,
-        romPct,
+
+      dayTrades.forEach((trade) => {
+        const sizedPL = sizedPLMap.get(trade) ?? trade.pl;
+        dayStat.netPL += sizedPL;
+        dayStat.tradeCount += 1;
+        if (trade.pl > 0) dayStat.winCount += 1;
+        dayStat.maxMargin = Math.max(dayStat.maxMargin, trade.marginReq || 0);
+        dayStat.marginUsed = (dayStat.marginUsed ?? 0) + (trade.marginReq || 0);
+        
+        // Map Trade to DailyTrade, keeping the actual opened timestamp (date + time).
+        const marginUsed = trade.marginReq || 0;
+        const romPct = marginUsed > 0 ? (sizedPL / marginUsed) * 100 : undefined;
+        const openedAt = (() => {
+          const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
+          // Default to noon if no time to avoid TZ shifting the date backwards.
+          const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
+          const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
+          const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
+          // Build a local timestamp string (no Z) to avoid timezone shifts when rendering
+          const hh = String(isNaN(h) ? 12 : h).padStart(2, "0");
+          const mm = String(isNaN(m) ? 0 : m).padStart(2, "0");
+          const ss = String(isNaN(s) ? 0 : s).padStart(2, "0");
+          return `${dateKey}T${hh}:${mm}:${ss}`;
+        })();
+        dayStat.trades.push({
+          id: undefined, // Trade model doesn't have ID
+          dateOpened: openedAt,
+          strategy: trade.strategy || "Custom",
+          legs: trade.legs || "",
+          premium: trade.premium || 0,
+          margin: marginUsed,
+          pl: sizedPL,
+          romPct,
+        });
       });
     });
     
@@ -414,7 +418,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     });
 
     return stats;
-  }, [filteredTrades, sizingMode, kellyFraction]);
+  }, [tradesByDay, filteredTrades, sizingMode, kellyFraction]);
 
   // Aggregate trades by month for the current year
   const monthlyStats = useMemo(() => {
@@ -423,7 +427,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = new Date(getTradingDateKey(trade));
+      const dayKey = resolveDayKey(trade);
+      if (!dayKey || dayKey === "1970-01-01") return;
+      const date = parseISO(dayKey);
         
       if (getYear(date) !== year) return;
 
@@ -472,7 +478,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = new Date(getTradingDateKey(trade));
+      const dayKey = resolveDayKey(trade);
+      if (!dayKey || dayKey === "1970-01-01") return;
+      const date = parseISO(dayKey);
       const y = getYear(date);
       const m = getMonth(date);
 
@@ -740,8 +748,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((t) => {
-      const dateKey = getTradingDateKey(t);
-      const d = new Date(dateKey);
+      const dateKey = resolveDayKey(t);
+      if (!dateKey || dateKey === "1970-01-01") return;
+      const d = parseISO(dateKey);
       const dow = d.getDay();
       if (dow === 0 || dow === 6) return; // skip weekends
       const idx = dow - 1; // Mon -> 0
@@ -766,16 +775,34 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return buckets.filter((b) => b.trades > 0);
   }, [filteredTrades, sizingMode, kellyFraction]);
 
-  const handleDayClick = (stats: DaySummary) => {
-    setSelectedDayStats(stats);
+  const selectedSummary = useMemo(() => {
+    if (modalMode === "week") return selectedWeekStats;
+    if (selectedDayKey) return dailyStats.get(selectedDayKey) ?? null;
+    return null;
+  }, [modalMode, selectedWeekStats, selectedDayKey, dailyStats]);
+
+  const handleDayClick = (dayKey: string) => {
+    const stats = dailyStats.get(dayKey);
+    if (!stats) return;
+    setSelectedDayKey(dayKey);
+    setSelectedWeekStats(null);
     setModalMode("day");
     setIsModalOpen(true);
   };
 
   const handleWeekClick = (stats: WeekSummary) => {
-    setSelectedDayStats(stats);
+    setSelectedWeekStats(stats);
+    setSelectedDayKey(null);
     setModalMode("week");
     setIsModalOpen(true);
+  };
+
+  const handleModalOpenChange = (open: boolean) => {
+    setIsModalOpen(open);
+    if (!open) {
+      setSelectedDayKey(null);
+      setSelectedWeekStats(null);
+    }
   };
 
   const romTrend = useMemo(() => {
@@ -812,10 +839,14 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const years = useMemo(() => {
     const yearsSet = new Set<number>();
     trades.forEach((t) => {
-        const date = t.dateOpened instanceof Date 
-        ? t.dateOpened 
-        : new Date(t.dateOpened);
-        yearsSet.add(getYear(date));
+        const key = resolveDayKey(t);
+        if (key && key !== "1970-01-01") {
+          yearsSet.add(getYear(parseISO(key)));
+          return;
+        }
+        const fallback =
+          t.dateOpened instanceof Date ? t.dateOpened : new Date(t.dateOpened);
+        if (!isNaN(fallback.getTime())) yearsSet.add(getYear(fallback));
     });
     // Ensure current year is always available
     yearsSet.add(new Date().getFullYear());
@@ -1129,8 +1160,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
       <DailyDetailModal
         open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        summary={selectedDayStats}
+        onOpenChange={handleModalOpenChange}
+        summary={selectedSummary}
         mode={modalMode}
       />
     </div>
