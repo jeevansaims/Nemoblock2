@@ -141,15 +141,25 @@ const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
 
 // Trading-day key must stay in lockstep with the Monday-start grid to avoid weekday drift.
 const getTradingDateKey = (trade: Trade): string => {
+  // Prefer realized (close) timestamp; fall back to open.
+  const rawDate =
+    (trade.dateClosed as Date | undefined) ?? (trade.dateOpened as Date);
   const base =
-    trade.dateOpened instanceof Date
-      ? new Date(trade.dateOpened.getTime())
-      : new Date(trade.dateOpened);
-  const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
+    rawDate instanceof Date ? new Date(rawDate.getTime()) : new Date(rawDate);
+  const [hRaw, mRaw, sRaw] = (trade.timeClosed || trade.timeOpened || "").split(":");
   const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
   const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
   const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
   base.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
+
+  // If the close lands on a weekend (common for expirations), attribute it to the prior Friday.
+  const dow = base.getDay(); // 0 = Sun, 6 = Sat
+  if (dow === 0) {
+    base.setDate(base.getDate() - 2);
+  } else if (dow === 6) {
+    base.setDate(base.getDate() - 1);
+  }
+
   return format(base, "yyyy-MM-dd");
 };
 
@@ -317,11 +327,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       const marginUsed = trade.marginReq || 0;
       const romPct = marginUsed > 0 ? (sizedPL / marginUsed) * 100 : undefined;
       const openedAt = (() => {
-        const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
+        const [hRaw, mRaw, sRaw] = (trade.timeClosed || trade.timeOpened || "").split(":");
         // Default to noon if no time to avoid TZ shifting the date backwards.
         const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
         const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
         const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
+        // Use the trading-day dateKey as the base to keep alignment
         const dt = new Date(date);
         dt.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
         return dt.toISOString();
