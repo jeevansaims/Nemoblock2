@@ -31,6 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
+import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
@@ -57,22 +58,6 @@ const formatCompactUsd = (value: number) => {
     return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-};
-
-const computeMaxDrawdownPctFromSeries = (entries: { netPL: number }[]): number => {
-  if (entries.length === 0) return 0;
-  let equity = 0;
-  let peak = 0;
-  let maxDd = 0;
-  entries.forEach(({ netPL }) => {
-    equity += netPL;
-    peak = Math.max(peak, equity);
-    if (peak > 0) {
-      const dd = ((equity - peak) / peak) * 100;
-      maxDd = Math.min(maxDd, dd); // most negative drawdown
-    }
-  });
-  return maxDd;
 };
 
 const getTradeLots = (trade: Trade) => {
@@ -507,6 +492,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return { totalPL };
   }, [filteredTrades, sizingMode, kellyFraction]);
 
+  const maxDrawdownPctAll = useMemo(() => {
+    const calculator = new PortfolioStatsCalculator();
+    const stats = calculator.calculatePortfolioStats(filteredTrades);
+    return Math.abs(stats.maxDrawdown ?? 0);
+  }, [filteredTrades]);
+
   // Calculate max margin for the current month to scale utilization bars
   const maxMarginForMonth = useMemo(() => {
     let max = 0;
@@ -586,23 +577,19 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     let tradeCount = 0;
     let winCount = 0;
     let rolling7d = 0;
-    let maxDrawdownPct = 0;
 
     if (view === "month") {
       const currentMonthStr = format(currentDate, "yyyy-MM");
       const keysInMonth = Array.from(dailyStats.keys())
         .filter((k) => k.startsWith(currentMonthStr))
         .sort();
-      const monthEntries: { netPL: number }[] = [];
       dailyStats.forEach((stat, dateKey) => {
         if (dateKey.startsWith(currentMonthStr)) {
           netPL += stat.netPL;
           tradeCount += stat.tradeCount;
           winCount += stat.winCount;
-          monthEntries.push({ netPL: stat.netPL });
         }
       });
-      maxDrawdownPct = computeMaxDrawdownPctFromSeries(monthEntries);
       // rolling 7d sum using last seven days in month
       const recentKeys = keysInMonth.slice(-7);
       rolling7d = recentKeys.reduce(
@@ -610,16 +597,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         0
       );
     } else {
-      const currentYear = getYear(currentDate);
-      const yearEntries: { netPL: number }[] = [];
       dailyStats.forEach((stat) => {
-        if (getYear(stat.date) !== currentYear) return;
         netPL += stat.netPL;
         tradeCount += stat.tradeCount;
         winCount += stat.winCount;
-        yearEntries.push({ netPL: stat.netPL });
       });
-      maxDrawdownPct = computeMaxDrawdownPctFromSeries(yearEntries);
     }
 
     return {
@@ -627,7 +609,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       tradeCount,
       winRate: tradeCount > 0 ? Math.round((winCount / tradeCount) * 100) : 0,
       rolling7d,
-      maxDrawdownPct,
     };
   }, [view, currentDate, dailyStats]);
 
@@ -879,7 +860,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-rose-500">
-              {Math.abs(periodStats.maxDrawdownPct).toFixed(1)}%
+              {maxDrawdownPctAll.toFixed(2)}%
             </div>
           </CardContent>
         </Card>
