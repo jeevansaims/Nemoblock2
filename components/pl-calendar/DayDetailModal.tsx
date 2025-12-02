@@ -37,6 +37,8 @@ export interface DailyTrade {
 export interface DaySummary {
   date: Date;
   endDate?: Date;
+  // String key representing the trading day (yyyy-MM-dd) in market timezone.
+  dayKey?: string;
   netPL: number;
   tradeCount: number;
   winRate: number;
