@@ -31,7 +31,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trade } from "@/lib/models/trade";
-import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
@@ -492,19 +491,40 @@ const allDataStats = useMemo(() => {
   return { totalPL };
 }, [filteredTrades, sizingMode, kellyFraction]);
 
-  const sizedTradesForStats = useMemo(() => {
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-    return filteredTrades.map((t) => ({
-      ...t,
-      pl: sizedPLMap.get(t) ?? t.pl,
-    }));
-  }, [filteredTrades, sizingMode, kellyFraction]);
-
   const maxDrawdownPctAll = useMemo(() => {
-    const calculator = new PortfolioStatsCalculator();
-    const stats = calculator.calculatePortfolioStats(sizedTradesForStats);
-    return Math.abs(stats.maxDrawdown ?? 0);
-  }, [sizedTradesForStats]);
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+    if (filteredTrades.length === 0) return 0;
+
+    // Sort by close date/time; fall back to open date/time if close not present.
+    const tradesSorted = [...filteredTrades].sort((a, b) => {
+      const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
+      const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+      if (da !== db) return da - db;
+      return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(b.timeClosed ?? b.timeOpened ?? "");
+    });
+
+    // Derive a starting capital using fundsAtClose when available; otherwise default to 100k.
+    const first = tradesSorted[0];
+    const baseFromFunds =
+      typeof first.fundsAtClose === "number" && typeof first.pl === "number"
+        ? first.fundsAtClose - first.pl
+        : undefined;
+    let equity = typeof baseFromFunds === "number" && baseFromFunds > 0 ? baseFromFunds : 100_000;
+    let peak = equity;
+    let maxDd = 0;
+
+    tradesSorted.forEach((t) => {
+      const sizedPL = sizedPLMap.get(t) ?? t.pl;
+      equity += sizedPL;
+      peak = Math.max(peak, equity);
+      if (peak > 0) {
+        const dd = ((peak - equity) / peak) * 100;
+        maxDd = Math.max(maxDd, dd);
+      }
+    });
+
+    return maxDd;
+  }, [filteredTrades, sizingMode, kellyFraction]);
 
   // Calculate max margin for the current month to scale utilization bars
   const maxMarginForMonth = useMemo(() => {
