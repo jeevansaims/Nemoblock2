@@ -23,11 +23,15 @@ interface PLAnalyticsPanelProps {
   trades: RawTrade[];
 }
 
-const fmtUsd = (v: number) =>
-  `${v >= 0 ? "$" : "-$"}${Math.abs(v).toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })}`;
+const fmtUsd = (v: number) => {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000) return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
 
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
