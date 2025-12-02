@@ -139,6 +139,29 @@ const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
   return fractions;
 };
 
+const getTradingDateKey = (trade: Trade): string => {
+  const base =
+    trade.dateOpened instanceof Date
+      ? new Date(trade.dateOpened.getTime())
+      : new Date(trade.dateOpened);
+  const [hRaw, mRaw, sRaw] = (trade.timeOpened || "").split(":");
+  const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
+  const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
+  const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
+  // Build a UTC-normalized date to avoid TZ drift; use midnight if no time is provided.
+  const utcDate = new Date(
+    Date.UTC(
+      base.getFullYear(),
+      base.getMonth(),
+      base.getDate(),
+      isNaN(h) ? 12 : h,
+      isNaN(m) ? 0 : m,
+      isNaN(s) ? 0 : s
+    )
+  );
+  return utcDate.toISOString().slice(0, 10); // yyyy-MM-dd
+};
+
 const computeSizedPLMap = (
   trades: Trade[],
   sizingMode: SizingMode,
@@ -274,8 +297,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = normalizeTradeDate(trade);
-      const dateKey = format(date, "yyyy-MM-dd");
+      const dateKey = getTradingDateKey(trade);
+      const date = new Date(dateKey);
 
       if (!stats.has(dateKey)) {
         stats.set(dateKey, {
@@ -401,7 +424,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = normalizeTradeDate(trade);
+      const date = new Date(getTradingDateKey(trade));
         
       if (getYear(date) !== year) return;
 
@@ -450,7 +473,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
 
     filteredTrades.forEach((trade) => {
-      const date = normalizeTradeDate(trade);
+      const date = new Date(getTradingDateKey(trade));
       const y = getYear(date);
       const m = getMonth(date);
 
