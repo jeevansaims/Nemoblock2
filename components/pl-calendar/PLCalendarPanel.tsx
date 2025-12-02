@@ -40,7 +40,6 @@ import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
 import { RomTrendChart } from "./RomTrendChart";
-import { MonthStats } from "./YearlyPLTable";
 import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
 
 interface PLCalendarPanelProps {
@@ -58,6 +57,22 @@ const formatCompactUsd = (value: number) => {
     return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+
+const computeMaxDrawdownPct = (entries: { netPL: number }[]): number => {
+  if (entries.length === 0) return 0;
+  let equity = 0;
+  let peak = 0;
+  let maxDd = 0;
+  entries.forEach((e) => {
+    equity += e.netPL;
+    peak = Math.max(peak, equity);
+    if (peak > 0) {
+      const dd = ((equity - peak) / peak) * 100;
+      maxDd = Math.min(maxDd, dd);
+    }
+  });
+  return maxDd;
 };
 
 const getTradeLots = (trade: Trade) => {
@@ -420,55 +435,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return stats;
   }, [tradesByDay, filteredTrades, sizingMode, kellyFraction]);
 
-  // Aggregate trades by month for the current year
-  const monthlyStats = useMemo(() => {
-    const stats = new Map<number, MonthStats>();
-    const year = getYear(currentDate);
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-
-    filteredTrades.forEach((trade) => {
-      const dayKey = resolveDayKey(trade);
-      if (!dayKey || dayKey === "1970-01-01") return;
-      const date = parseISO(dayKey);
-        
-      if (getYear(date) !== year) return;
-
-      const monthIndex = getMonth(date);
-      const sizedPL = sizedPLMap.get(trade) ?? trade.pl;
-
-      if (!stats.has(monthIndex)) {
-        stats.set(monthIndex, {
-          monthIndex,
-          netPL: 0,
-          tradeCount: 0,
-          winCount: 0,
-          lossCount: 0,
-          totalPremium: 0,
-          totalMargin: 0,
-          romPct: 0,
-        });
-      }
-
-      const monthStat = stats.get(monthIndex)!;
-      monthStat.netPL += sizedPL;
-      monthStat.tradeCount += 1;
-      if (trade.pl > 0) monthStat.winCount += 1;
-      if (trade.pl < 0) monthStat.lossCount += 1;
-      monthStat.totalPremium += trade.premium || 0;
-      monthStat.totalMargin = (monthStat.totalMargin ?? 0) + (trade.marginReq || 0);
-    });
-
-    // compute monthly ROM
-    stats.forEach((m) => {
-      m.romPct =
-        m.totalMargin && m.totalMargin > 0
-          ? (m.netPL / m.totalMargin) * 100
-          : 0;
-    });
-
-    return stats;
-  }, [filteredTrades, currentDate, sizingMode, kellyFraction]);
-
   // Aggregate trades by year/month for the heatmap
   const yearlySnapshot = useMemo<YearlyCalendarSnapshot>(() => {
     const yearMap = new Map<
@@ -620,19 +586,23 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     let tradeCount = 0;
     let winCount = 0;
     let rolling7d = 0;
+    let maxDrawdownPct = 0;
 
     if (view === "month") {
       const currentMonthStr = format(currentDate, "yyyy-MM");
       const keysInMonth = Array.from(dailyStats.keys())
         .filter((k) => k.startsWith(currentMonthStr))
         .sort();
+      const monthEntries: { netPL: number }[] = [];
       dailyStats.forEach((stat, dateKey) => {
         if (dateKey.startsWith(currentMonthStr)) {
           netPL += stat.netPL;
           tradeCount += stat.tradeCount;
           winCount += stat.winCount;
+          monthEntries.push({ netPL: stat.netPL });
         }
       });
+      maxDrawdownPct = computeMaxDrawdownPct(monthEntries);
       // rolling 7d sum using last seven days in month
       const recentKeys = keysInMonth.slice(-7);
       rolling7d = recentKeys.reduce(
@@ -640,11 +610,18 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         0
       );
     } else {
-      monthlyStats.forEach((stat) => {
-        netPL += stat.netPL;
-        tradeCount += stat.tradeCount;
-        winCount += stat.winCount;
+      // Use daily data in the current year to compute drawdown
+      const currentYear = getYear(currentDate);
+      const yearEntries: { netPL: number }[] = [];
+      dailyStats.forEach((stat) => {
+        if (getYear(stat.date) === currentYear) {
+          netPL += stat.netPL;
+          tradeCount += stat.tradeCount;
+          winCount += stat.winCount;
+          yearEntries.push({ netPL: stat.netPL });
+        }
       });
+      maxDrawdownPct = computeMaxDrawdownPct(yearEntries);
     }
 
     return {
@@ -652,8 +629,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       tradeCount,
       winRate: tradeCount > 0 ? Math.round((winCount / tradeCount) * 100) : 0,
       rolling7d,
+      maxDrawdownPct,
     };
-  }, [view, currentDate, dailyStats, monthlyStats]);
+  }, [view, currentDate, dailyStats]);
 
   const weeklyStats = useMemo(() => {
     const weeks = new Map<string, WeekSummary>();
@@ -857,7 +835,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   return (
     <div className="space-y-6">
       {/* Header Stats */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -894,6 +872,17 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{periodStats.winRate}%</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Max Drawdown</CardTitle>
+            <div className="text-muted-foreground">%</div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-rose-500">
+              {periodStats.maxDrawdownPct.toFixed(1)}%
+            </div>
           </CardContent>
         </Card>
       </div>
