@@ -483,20 +483,28 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return { years };
   }, [filteredTrades, sizingMode, kellyFraction]);
 
-  const allDataStats = useMemo(() => {
+const allDataStats = useMemo(() => {
+  const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+  let totalPL = 0;
+  filteredTrades.forEach((t) => {
+    totalPL += sizedPLMap.get(t) ?? t.pl;
+  });
+  return { totalPL };
+}, [filteredTrades, sizingMode, kellyFraction]);
+
+  const sizedTradesForStats = useMemo(() => {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-    let totalPL = 0;
-    filteredTrades.forEach((t) => {
-      totalPL += sizedPLMap.get(t) ?? t.pl;
-    });
-    return { totalPL };
+    return filteredTrades.map((t) => ({
+      ...t,
+      pl: sizedPLMap.get(t) ?? t.pl,
+    }));
   }, [filteredTrades, sizingMode, kellyFraction]);
 
   const maxDrawdownPctAll = useMemo(() => {
     const calculator = new PortfolioStatsCalculator();
-    const stats = calculator.calculatePortfolioStats(filteredTrades);
+    const stats = calculator.calculatePortfolioStats(sizedTradesForStats);
     return Math.abs(stats.maxDrawdown ?? 0);
-  }, [filteredTrades]);
+  }, [sizedTradesForStats]);
 
   // Calculate max margin for the current month to scale utilization bars
   const maxMarginForMonth = useMemo(() => {
