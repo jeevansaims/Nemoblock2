@@ -510,8 +510,13 @@ const allDataStats = useMemo(() => {
       return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(b.timeClosed ?? b.timeOpened ?? "");
     });
 
-    // Seed equity to a positive baseline so percentage DD is meaningful.
-    let equity = 100_000;
+    // Seed equity using funds baseline when available so normalized sizing still references real capital.
+    const first = tradesSorted[0];
+    const baseFromFunds =
+      typeof first.fundsAtClose === "number" && typeof first.pl === "number"
+        ? first.fundsAtClose - first.pl
+        : undefined;
+    let equity = typeof baseFromFunds === "number" && baseFromFunds > 0 ? baseFromFunds : 100_000;
     let peak = equity;
     let maxDd = 0;
 
