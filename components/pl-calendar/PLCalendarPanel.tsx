@@ -326,10 +326,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         const h = hRaw !== undefined && hRaw !== "" ? Number(hRaw) : 12;
         const m = mRaw !== undefined && mRaw !== "" ? Number(mRaw) : 0;
         const s = sRaw !== undefined && sRaw !== "" ? Number(sRaw) : 0;
-        // Use the trading-day dateKey as the base to keep alignment
-        const dt = new Date(date);
-        dt.setHours(isNaN(h) ? 12 : h, isNaN(m) ? 0 : m, isNaN(s) ? 0 : s, 0);
-        return dt.toISOString();
+        // Build a local timestamp string (no Z) to avoid timezone shifts when rendering
+        const hh = String(isNaN(h) ? 12 : h).padStart(2, "0");
+        const mm = String(isNaN(m) ? 0 : m).padStart(2, "0");
+        const ss = String(isNaN(s) ? 0 : s).padStart(2, "0");
+        return `${dateKey}T${hh}:${mm}:${ss}`;
       })();
       dayStat.trades.push({
         id: undefined, // Trade model doesn't have ID
