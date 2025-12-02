@@ -510,8 +510,9 @@ const allDataStats = useMemo(() => {
       return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(b.timeClosed ?? b.timeOpened ?? "");
     });
 
-    let equity = 0;
-    let peak = 0;
+    // Seed equity to a positive baseline so percentage DD is meaningful for normalized/Kelly sizing.
+    let equity = 100_000;
+    let peak = equity;
     let maxDd = 0;
 
     tradesSorted.forEach((t) => {
