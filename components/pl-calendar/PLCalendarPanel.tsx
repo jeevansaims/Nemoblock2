@@ -732,7 +732,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return Array.from(weeks.values()).sort(
       (a, b) => a.date.getTime() - b.date.getTime()
     );
-  }, [dailyStats, currentDate]);
+    // Keep sizing deps so weekly stats refresh when P/L scaling changes.
+  }, [dailyStats, currentDate, sizingMode, kellyFraction]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const weekdayAlpha = useMemo(() => {
     const buckets = Array.from({ length: 5 }, (_, idx) => ({
