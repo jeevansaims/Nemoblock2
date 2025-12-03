@@ -38,22 +38,24 @@ const getCorrelationBadge = (corr: number) => {
 
 const correlationToColor = (value: number) => {
   const v = Math.max(-1, Math.min(1, value));
-  // Blues for negatives, reds for positives, soft neutral near zero
-  if (v === 0) return "rgba(248, 250, 252, 0.9)"; // near-white
+  if (v === 0) return "rgba(241, 245, 249, 0.9)"; // soft neutral
+
+  const lerp = (start: number[], end: number[], t: number) =>
+    start.map((s, i) => Math.round(s + (end[i] - s) * t));
+
   if (v < 0) {
-    // interpolate from light blue to deep blue
-    const intensity = Math.abs(v);
-    const start = [226, 232, 240]; // light slate
-    const end = [15, 76, 129]; // deep blue
-    const mix = start.map((s, i) => Math.round(s + (end[i] - s) * intensity));
-    return `rgba(${mix[0]}, ${mix[1]}, ${mix[2]}, 0.9)`;
+    const t = Math.abs(v);
+    const start = [226, 234, 245]; // light blue
+    const end = [64, 98, 146]; // muted navy
+    const [r, g, b] = lerp(start, end, t);
+    return `rgba(${r}, ${g}, ${b}, 0.9)`;
   }
-  // positive
-  const intensity = v;
-  const start = [254, 226, 226]; // light red
-  const end = [153, 27, 27]; // deep red
-  const mix = start.map((s, i) => Math.round(s + (end[i] - s) * intensity));
-  return `rgba(${mix[0]}, ${mix[1]}, ${mix[2]}, 0.9)`;
+
+  const t = v;
+  const start = [249, 227, 227]; // light red
+  const end = [199, 59, 59]; // muted deep red
+  const [r, g, b] = lerp(start, end, t);
+  return `rgba(${r}, ${g}, ${b}, 0.9)`;
 };
 
 const scoreBarClass = "h-2 rounded-full bg-muted overflow-hidden";
@@ -117,7 +119,7 @@ const CorrelationMatrixTable = ({ result }: { result: MultiCorrelationResult }) 
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="mb-3 text-sm font-medium">Correlation Matrix</div>
+      <div className="mb-3 text-sm font-medium">Multi Correlation Matrix</div>
       <div className="overflow-auto">
         <table className="w-full min-w-max border-collapse text-xs">
           <thead>
