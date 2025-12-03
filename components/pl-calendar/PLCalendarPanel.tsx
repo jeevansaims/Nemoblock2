@@ -222,8 +222,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [stressRange, setStressRange] = useState<{ p5: number; p50: number; p95: number } | null>(
     null
   );
-  const [weeklyMode, setWeeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
-  const [heatmapMetric, setHeatmapMetric] = useState<"pl" | "rom">("pl");
+  const [weeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
+  const [heatmapMetric, setHeatmapMetric] = useState<"pl" | "rom" | "running">("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
@@ -918,25 +918,6 @@ const allDataStats = useMemo(() => {
           <div className="inline-flex items-center rounded-full border bg-muted/40 p-1 text-xs">
             <Button
               size="sm"
-              variant={weeklyMode === "trailing7" ? "default" : "ghost"}
-              className="h-6 px-3 rounded-full"
-              onClick={() => setWeeklyMode("trailing7")}
-            >
-              7d
-            </Button>
-            <Button
-              size="sm"
-              variant={weeklyMode === "calendarWeek" ? "default" : "ghost"}
-              className="h-6 px-3 rounded-full"
-              onClick={() => setWeeklyMode("calendarWeek")}
-            >
-              Week
-            </Button>
-          </div>
-
-          <div className="inline-flex items-center rounded-full border bg-muted/40 p-1 text-xs">
-            <Button
-              size="sm"
               variant={heatmapMetric === "pl" ? "default" : "ghost"}
               className="h-6 px-3 rounded-full"
               onClick={() => setHeatmapMetric("pl")}
@@ -950,6 +931,15 @@ const allDataStats = useMemo(() => {
               onClick={() => setHeatmapMetric("rom")}
             >
               ROM%
+            </Button>
+            <Button
+              size="sm"
+              variant={heatmapMetric === "running" ? "default" : "ghost"}
+              className="h-6 px-3 rounded-full"
+              onClick={() => setHeatmapMetric("running")}
+              title="Running / cumulative P&L over time"
+            >
+              Running
             </Button>
           </div>
 
