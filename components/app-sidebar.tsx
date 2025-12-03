@@ -79,6 +79,12 @@ const navData = {
       badge: "New",
     },
     {
+      title: "P/L Analytics",
+      href: "/pl-analytics",
+      icon: IconReportAnalytics,
+      badge: "New",
+    },
+    {
       title: "Walk-Forward",
       href: "/walk-forward",
       icon: IconTimelineEvent,
