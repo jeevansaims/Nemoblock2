@@ -37,13 +37,23 @@ const getCorrelationBadge = (corr: number) => {
 };
 
 const correlationToColor = (value: number) => {
-  // Map -1..1 to hue 210 (blue) -> 0 (red)
-  const clamped = Math.max(-1, Math.min(1, value));
-  const hue = (1 - (clamped + 1) / 2) * 210;
-  const saturation = 70;
-  const lightness = 50;
-  const alpha = 0.75;
-  return `hsla(${hue.toFixed(0)}, ${saturation}%, ${lightness}%, ${alpha})`;
+  const v = Math.max(-1, Math.min(1, value));
+  // Blues for negatives, reds for positives, soft neutral near zero
+  if (v === 0) return "rgba(248, 250, 252, 0.9)"; // near-white
+  if (v < 0) {
+    // interpolate from light blue to deep blue
+    const intensity = Math.abs(v);
+    const start = [226, 232, 240]; // light slate
+    const end = [15, 76, 129]; // deep blue
+    const mix = start.map((s, i) => Math.round(s + (end[i] - s) * intensity));
+    return `rgba(${mix[0]}, ${mix[1]}, ${mix[2]}, 0.9)`;
+  }
+  // positive
+  const intensity = v;
+  const start = [254, 226, 226]; // light red
+  const end = [153, 27, 27]; // deep red
+  const mix = start.map((s, i) => Math.round(s + (end[i] - s) * intensity));
+  return `rgba(${mix[0]}, ${mix[1]}, ${mix[2]}, 0.9)`;
 };
 
 const scoreBarClass = "h-2 rounded-full bg-muted overflow-hidden";
@@ -207,6 +217,80 @@ const ClusterTable = ({ result }: { result: MultiCorrelationResult }) => {
   );
 };
 
+const QuickAnalysis = ({
+  result,
+  method,
+}: {
+  result: MultiCorrelationResult;
+  method: CorrelationMethod;
+}) => {
+  const { strategies, correlationMatrix } = result;
+  const summary = useMemo(() => {
+    let strongest = { val: -Infinity, pair: "" };
+    let weakest = { val: Infinity, pair: "" };
+    let sumAbs = 0;
+    let count = 0;
+
+    for (let i = 0; i < strategies.length; i++) {
+      for (let j = i + 1; j < strategies.length; j++) {
+        const val = correlationMatrix[i][j] ?? 0;
+        const pair = `${strategies[i]} ↔ ${strategies[j]}`;
+        if (Math.abs(val) > Math.abs(strongest.val)) {
+          strongest = { val, pair };
+        }
+        if (Math.abs(val) < Math.abs(weakest.val)) {
+          weakest = { val, pair };
+        }
+        sumAbs += Math.abs(val);
+        count += 1;
+      }
+    }
+
+    const average = count > 0 ? sumAbs / count : 0;
+    return {
+      strongest,
+      weakest,
+      average,
+    };
+  }, [correlationMatrix, strategies]);
+
+  const formatVal = (v: number) => v.toFixed(2);
+
+  return (
+    <div className="rounded-lg border bg-card p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">Quick Analysis</div>
+          <div className="text-xs text-muted-foreground">
+            {strategies.length} strategies · {method === "pearson" ? "Pearson" : "Kendall"} · daily P/L
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div>
+            <div className="text-xs text-muted-foreground">Strongest</div>
+            <div className="text-lg font-semibold">{formatVal(summary.strongest.val)}</div>
+            <div className="text-xs text-muted-foreground whitespace-normal">
+              {summary.strongest.pair || "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Weakest</div>
+            <div className="text-lg font-semibold">{formatVal(summary.weakest.val)}</div>
+            <div className="text-xs text-muted-foreground whitespace-normal">
+              {summary.weakest.pair || "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Average |corr|</div>
+            <div className="text-lg font-semibold">{formatVal(summary.average)}</div>
+            <div className="text-xs text-muted-foreground">Off-diagonal mean</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export function MultiCorrelationPanel({ series, initialMethod }: MultiCorrelationPanelProps) {
   const [method, setMethod] = useState<CorrelationMethod>(initialMethod ?? "pearson");
   const [clusterThreshold, setClusterThreshold] = useState(0.4);
@@ -251,6 +335,8 @@ export function MultiCorrelationPanel({ series, initialMethod }: MultiCorrelatio
             />
           </div>
         </div>
+
+        <QuickAnalysis result={result} method={method} />
 
         <MetricsRow result={result} />
 
