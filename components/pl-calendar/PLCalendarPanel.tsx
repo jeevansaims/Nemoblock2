@@ -1083,7 +1083,7 @@ const allDataStats = useMemo(() => {
           <div className="space-y-4">
             <YearHeatmap
               data={yearlySnapshot}
-              metric={heatmapMetric}
+              metric={heatmapMetric === "rom" ? "rom" : "pl"}
               onMonthClick={(year, monthIndex) => {
                 const newDate = new Date(currentDate);
                 newDate.setFullYear(year);
