@@ -138,7 +138,7 @@ export default function CorrelationMatrixPage() {
     };
 
     const heatmapLayout: Partial<Layout> = {
-      title: "",
+      title: { text: "" },
       height: 650,
       autosize: true,
       margin: {
