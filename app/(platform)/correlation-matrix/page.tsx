@@ -131,7 +131,6 @@ export default function CorrelationMatrixPage() {
       y: strategies,
       type: "heatmap" as const,
       colorscale: correlationColorscale,
-      zmid: 0,
       zmin: -1,
       zmax: 1,
       text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string,
