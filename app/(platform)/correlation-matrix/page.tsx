@@ -38,7 +38,7 @@ import {
 } from "@/lib/utils/export-helpers";
 import { Download, HelpCircle, Info } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { Data, Layout, PlotData } from "plotly.js";
+import type { Data, Layout, PlotData, HeatmapData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
@@ -125,7 +125,7 @@ export default function CorrelationMatrixPage() {
       [1.0, "#b91c1c"],
     ];
 
-    const heatmapData: Partial<PlotData> = {
+    const heatmapData: Partial<HeatmapData> = {
       z: correlationData,
       x: strategies,
       y: strategies,
