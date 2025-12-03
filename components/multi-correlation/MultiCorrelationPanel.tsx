@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTheme } from "next-themes";
 
 import {
   analyzeMultiCorrelation,
@@ -36,26 +37,29 @@ const getCorrelationBadge = (corr: number) => {
   return { label: "High", variant: "destructive" as const };
 };
 
-const correlationToColor = (value: number) => {
+const correlationToColor = (value: number, isDark: boolean) => {
   const v = Math.max(-1, Math.min(1, value));
-  if (v === 0) return "rgba(241, 245, 249, 0.9)"; // soft neutral
-
   const lerp = (start: number[], end: number[], t: number) =>
     start.map((s, i) => Math.round(s + (end[i] - s) * t));
 
+  if (v === 0) {
+    const neutral = isDark ? [31, 41, 55] : [241, 245, 249];
+    return `rgba(${neutral[0]}, ${neutral[1]}, ${neutral[2]}, 0.95)`;
+  }
+
   if (v < 0) {
     const t = Math.abs(v);
-    const start = [226, 234, 245]; // light blue
-    const end = [64, 98, 146]; // muted navy
+    const start = isDark ? [59, 130, 246] : [224, 242, 254]; // blue-500 vs light blue
+    const end = isDark ? [30, 64, 175] : [37, 99, 235]; // blue-800 vs blue-600
     const [r, g, b] = lerp(start, end, t);
-    return `rgba(${r}, ${g}, ${b}, 0.9)`;
+    return `rgba(${r}, ${g}, ${b}, 0.95)`;
   }
 
   const t = v;
-  const start = [249, 227, 227]; // light red
-  const end = [199, 59, 59]; // muted deep red
+  const start = isDark ? [248, 113, 113] : [254, 226, 226]; // red-400 vs light red
+  const end = isDark ? [127, 29, 29] : [185, 28, 28]; // deep red
   const [r, g, b] = lerp(start, end, t);
-  return `rgba(${r}, ${g}, ${b}, 0.9)`;
+  return `rgba(${r}, ${g}, ${b}, 0.95)`;
 };
 
 const scoreBarClass = "h-2 rounded-full bg-muted overflow-hidden";
@@ -114,6 +118,8 @@ const MetricsRow = ({ result }: { result: MultiCorrelationResult }) => {
 };
 
 const CorrelationMatrixTable = ({ result }: { result: MultiCorrelationResult }) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const { strategies, correlationMatrix } = result;
   if (strategies.length === 0) return null;
 
@@ -150,8 +156,8 @@ const CorrelationMatrixTable = ({ result }: { result: MultiCorrelationResult }) 
                     );
                   }
                   const value = correlationMatrix[i][j] ?? 0;
-                  const bg = correlationToColor(value);
-                  const textClass = Math.abs(value) > 0.6 ? "text-white" : "text-foreground";
+                  const bg = correlationToColor(value, isDark);
+                  const textClass = isDark ? "text-white" : "text-slate-900";
                   return (
                     <td key={colStrategy} className="p-1 text-center">
                       <div
