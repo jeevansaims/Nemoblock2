@@ -1074,7 +1074,7 @@ const allDataStats = useMemo(() => {
               maxMarginForPeriod={maxMarginForMonth}
               drawdownThreshold={drawdownThreshold}
               weeklyMode={weeklyMode}
-              heatmapMetric={heatmapMetric === "running" ? "pl" : heatmapMetric}
+              heatmapMetric={heatmapMetric}
               settings={calendarSettings}
             />
 
@@ -1093,7 +1093,7 @@ const allDataStats = useMemo(() => {
           <div className="space-y-4">
             <YearHeatmap
               data={yearlySnapshot}
-              metric={heatmapMetric === "running" ? "running" : heatmapMetric}
+              metric={heatmapMetric}
               onMonthClick={(year, monthIndex) => {
                 const newDate = new Date(currentDate);
                 newDate.setFullYear(year);
