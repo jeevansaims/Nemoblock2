@@ -548,7 +548,7 @@ export default function CorrelationMatrixPage() {
                 <div className="text-sm font-medium text-muted-foreground">
                   Strongest:
                 </div>
-                <div className="text-2xl font-bold" style={{ color: isDark ? '#fca5a5' : '#dc2626' }}>
+                <div className="text-2xl font-bold text-red-600 dark:text-red-300">
                   {analytics.strongest.value.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -560,7 +560,7 @@ export default function CorrelationMatrixPage() {
                 <div className="text-sm font-medium text-muted-foreground">
                   Weakest:
                 </div>
-                <div className="text-2xl font-bold" style={{ color: isDark ? '#93c5fd' : '#2563eb' }}>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-300">
                   {analytics.weakest.value.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">
