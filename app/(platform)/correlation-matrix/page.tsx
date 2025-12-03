@@ -38,7 +38,7 @@ import {
 } from "@/lib/utils/export-helpers";
 import { Download, HelpCircle, Info } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { Data, Layout } from "plotly.js";
+import type { Data, Layout, PlotData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
@@ -115,7 +115,7 @@ export default function CorrelationMatrixPage() {
 
     const { strategies, correlationData } = correlationMatrix;
     const tickColor = isDark ? "#e5e7eb" : "#1f2937";
-    const correlationColorscale: Data["colorscale"] = [
+    const correlationColorscale: PlotData["colorscale"] = [
       [0.0, "#0f172a"],
       [0.2, "#1e3a8a"],
       [0.4, "#38bdf8"],
@@ -125,7 +125,7 @@ export default function CorrelationMatrixPage() {
       [1.0, "#b91c1c"],
     ];
 
-    const heatmapData = {
+    const heatmapData: Partial<PlotData> = {
       z: correlationData,
       x: strategies,
       y: strategies,
