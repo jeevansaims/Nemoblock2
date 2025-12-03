@@ -144,6 +144,11 @@ export default function CorrelationMatrixPage() {
       hovertemplate: "%{y} ↔ %{x}<br>corr: %{z:.2f}<extra></extra>",
       text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string[],
       showscale: true,
+      colorbar: {
+        thickness: 14,
+        len: 0.8,
+        xpad: 20,
+      },
     };
 
     const heatmapLayout: Partial<Layout> = {
@@ -169,13 +174,6 @@ export default function CorrelationMatrixPage() {
       font: {
         color: isDark ? "#e5e7eb" : "#020617",
         size: 10,
-      },
-      coloraxis: {
-        colorbar: {
-          thickness: 14,
-          len: 0.8,
-          xpad: 20,
-        },
       },
       dragmode: false,
     };
