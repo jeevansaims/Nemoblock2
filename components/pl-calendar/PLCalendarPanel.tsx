@@ -67,6 +67,7 @@ const getTradeLots = (trade: Trade) => {
 };
 
 type SizingMode = "actual" | "normalized" | "kelly" | "halfKelly";
+type CalendarMetric = "pl" | "rom" | "running";
 
 const KELLY_MAX_FRACTION = 0.25;
 const KELLY_BASE_EQUITY = 100_000;
@@ -223,7 +224,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     null
   );
   const [weeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
-  const [heatmapMetric, setHeatmapMetric] = useState<"pl" | "rom" | "running">("pl");
+  const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
@@ -448,13 +449,19 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
     const years = Array.from(yearMap.entries())
       .map(([year, monthsMap]) => {
-        const months = Array.from(monthsMap.entries()).map(([month, vals]) => ({
-          month,
-          netPL: vals.netPL,
-          trades: vals.trades,
-          winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
-          romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
-        }));
+        const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => a[0] - b[0]);
+        let running = 0;
+        const months = sortedMonths.map(([month, vals]) => {
+          running += vals.netPL;
+          return {
+            month,
+            netPL: vals.netPL,
+            trades: vals.trades,
+            winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
+            romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
+            runningNetPL: running,
+          };
+        });
 
         const total = months.reduce(
           (acc, m) => {
@@ -915,6 +922,7 @@ const allDataStats = useMemo(() => {
             </TabsList>
           </Tabs>
 
+          {/* Metric toggle: P/L, ROM%, Running (Running shown only in Year view) */}
           <div className="inline-flex items-center rounded-full border bg-muted/40 p-1 text-xs">
             <Button
               size="sm"
@@ -932,15 +940,17 @@ const allDataStats = useMemo(() => {
             >
               ROM%
             </Button>
-            <Button
-              size="sm"
-              variant={heatmapMetric === "running" ? "default" : "ghost"}
-              className="h-6 px-3 rounded-full"
-              onClick={() => setHeatmapMetric("running")}
-              title="Running / cumulative P&L over time"
-            >
-              Running
-            </Button>
+            {view === "year" && (
+              <Button
+                size="sm"
+                variant={heatmapMetric === "running" ? "default" : "ghost"}
+                className="h-6 px-3 rounded-full"
+                onClick={() => setHeatmapMetric("running")}
+                title="Running / cumulative P&L over time"
+              >
+                Running
+              </Button>
+            )}
           </div>
 
           <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 p-1 text-xs">
