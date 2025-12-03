@@ -42,8 +42,7 @@ import type { Data, Layout, PlotData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const { theme } = useTheme();
   const activeBlockId = useBlockStore(
     (state) => state.blocks.find((b) => b.isActive)?.id
   );
@@ -54,6 +53,7 @@ export default function CorrelationMatrixPage() {
   const [normalization, setNormalization] =
     useState<CorrelationNormalization>("raw");
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
+  const isDark = theme === "dark";
 
   const analyticsContext = useMemo(
     () =>
@@ -108,78 +108,75 @@ export default function CorrelationMatrixPage() {
     return { correlationMatrix: matrix, analytics: stats };
   }, [trades, method, alignment, normalization, dateBasis]);
 
-  const correlationColorscale = useMemo(
-    () =>
-      (isDark
-        ? ([
-            [0, "#0ea5e9"], // strong blue for -1
-            [0.5, "#020617"], // near-neutral around 0 on dark bg
-            [1, "#f97373"], // bright red for +1
-          ] as PlotData["colorscale"])
-        : ([
-            [0, "#0ea5e9"], // strong blue for -1
-            [0.5, "#f9fafb"], // light neutral around 0
-            [1, "#dc2626"], // strong red for +1
-          ] as PlotData["colorscale"])),
-    [isDark]
-  );
-
   const { plotData, layout } = useMemo(() => {
     if (!correlationMatrix) {
       return { plotData: [], layout: {} };
     }
 
     const { strategies, correlationData } = correlationMatrix;
-    const strategyLabels = strategies;
+    const correlationColorscale: PlotData["colorscale"] = [
+      [0.0, "rgb(30, 64, 175)"], // blue-800
+      [0.25, "rgb(59, 130, 246)"], // blue-500
+      [0.5, "rgb(15, 23, 42)"], // slate-950 (near zero)
+      [0.75, "rgb(244, 114, 182)"], // rose-400
+      [1.0, "rgb(159, 18, 57)"], // rose-800
+    ];
 
-    const heatmapTrace: Partial<PlotData> & { zmid?: number } = {
-      x: strategyLabels,
-      y: strategyLabels,
+    const heatmapTextMatrix = correlationData.map((row) =>
+      row.map((val) => val.toFixed(2))
+    );
+
+    const heatmapData: Partial<PlotData> = {
       z: correlationData,
-      type: "heatmap",
+      x: strategies,
+      y: strategies,
+      type: "heatmap" as const,
       colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      zmid: 0,
-      hovertemplate: "%{y} ↔ %{x}<br>corr: %{z:.2f}<extra></extra>",
-      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string[],
-      showscale: true,
-      colorbar: {
-        thickness: 14,
-        len: 0.8,
-        xpad: 20,
+      text: heatmapTextMatrix as unknown as string[],
+      texttemplate: "%{text}",
+      textfont: {
+        size: 10,
+        color: "#e5e7eb", // zinc-200
       },
+      hovertemplate: "%{y} ↔ %{x}<br>%{z:.2f}<extra></extra>",
+      customdata: correlationData.map((row, yIndex) =>
+        row.map((_, xIndex) => [strategies[yIndex], strategies[xIndex]])
+      ) as unknown as PlotData["customdata"],
+      showscale: false,
     };
 
     const heatmapLayout: Partial<Layout> = {
-      title: { text: "" },
-      height: 650,
-      autosize: true,
-      margin: {
-        l: 220,
-        r: 40,
-        t: 30,
-        b: 220,
-      },
-      xaxis: {
-        tickangle: -45,
-        side: "bottom",
-        automargin: true,
-      },
-      yaxis: {
-        automargin: true,
-      },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
-      font: {
-        color: isDark ? "#e5e7eb" : "#020617",
-        size: 10,
+      xaxis: {
+        side: "bottom",
+        tickangle: 45,
+        tickmode: "linear",
+        automargin: true,
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
       },
-      dragmode: false,
+      yaxis: {
+        autorange: "reversed",
+        tickmode: "linear",
+        automargin: true,
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
+      },
+      margin: {
+        l: 150,
+        r: 20,
+        t: 20,
+        b: 160,
+      },
     };
 
-    return { plotData: [heatmapTrace as unknown as Data], layout: heatmapLayout };
-  }, [correlationMatrix, correlationColorscale, isDark]);
+    return { plotData: [heatmapData as unknown as Data], layout: heatmapLayout };
+  }, [correlationMatrix]);
 
   const activeBlock = useBlockStore(
     (state) => state.blocks.find((block) => block.id === activeBlockId)
@@ -548,7 +545,7 @@ export default function CorrelationMatrixPage() {
                 <div className="text-sm font-medium text-muted-foreground">
                   Strongest:
                 </div>
-                <div className="text-2xl font-bold text-red-600 dark:text-red-300">
+                <div className="text-2xl font-bold" style={{ color: isDark ? '#fca5a5' : '#dc2626' }}>
                   {analytics.strongest.value.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">
@@ -560,7 +557,7 @@ export default function CorrelationMatrixPage() {
                 <div className="text-sm font-medium text-muted-foreground">
                   Weakest:
                 </div>
-                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-300">
+                <div className="text-2xl font-bold" style={{ color: isDark ? '#93c5fd' : '#2563eb' }}>
                   {analytics.weakest.value.toFixed(2)}
                 </div>
                 <div className="text-xs text-muted-foreground">
