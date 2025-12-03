@@ -288,13 +288,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     window.localStorage.setItem("plCalendarKellyPct", String(Math.round(kellyFraction * 100)));
   }, [kellyFraction]);
 
-  // Month view does not support running metric; fallback to P/L if selected
-  useEffect(() => {
-    if (view === "month" && heatmapMetric === "running") {
-      setHeatmapMetric("pl");
-    }
-  }, [view, heatmapMetric]);
-
   // Aggregate trades by day
   // This useMemo calculates daily stats including win/loss counts and rolling metrics
   const dailyStats = useMemo(() => {
@@ -929,6 +922,7 @@ const allDataStats = useMemo(() => {
             </TabsList>
           </Tabs>
 
+          {/* Metric toggle: P/L, ROM%, Running (Running shown only in Year view) */}
           <div className="inline-flex items-center rounded-full border bg-muted/40 p-1 text-xs">
             <Button
               size="sm"
@@ -946,15 +940,17 @@ const allDataStats = useMemo(() => {
             >
               ROM%
             </Button>
-            <Button
-              size="sm"
-              variant={heatmapMetric === "running" ? "default" : "ghost"}
-              className="h-6 px-3 rounded-full"
-              onClick={() => setHeatmapMetric("running")}
-              title="Running / cumulative P&L over time"
-            >
-              Running
-            </Button>
+            {view === "year" && (
+              <Button
+                size="sm"
+                variant={heatmapMetric === "running" ? "default" : "ghost"}
+                className="h-6 px-3 rounded-full"
+                onClick={() => setHeatmapMetric("running")}
+                title="Running / cumulative P&L over time"
+              >
+                Running
+              </Button>
+            )}
           </div>
 
           <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 p-1 text-xs">
@@ -1097,7 +1093,7 @@ const allDataStats = useMemo(() => {
           <div className="space-y-4">
             <YearHeatmap
               data={yearlySnapshot}
-              metric={heatmapMetric === "rom" ? "rom" : "pl"}
+              metric={heatmapMetric === "running" ? "running" : heatmapMetric}
               onMonthClick={(year, monthIndex) => {
                 const newDate = new Date(currentDate);
                 newDate.setFullYear(year);
