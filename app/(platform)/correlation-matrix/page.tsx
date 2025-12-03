@@ -112,18 +112,14 @@ export default function CorrelationMatrixPage() {
     () =>
       (isDark
         ? ([
-            [0.0, "#2563eb"], // deep blue (negative)
-            [0.25, "#60a5fa"],
-            [0.5, "#3f3f46"], // neutral slate
-            [0.75, "#f87171"],
-            [1.0, "#ef4444"], // bright red (positive)
+            [0, "#0ea5e9"], // strong blue for -1
+            [0.5, "#020617"], // near-neutral around 0 on dark bg
+            [1, "#f97373"], // bright red for +1
           ] as PlotData["colorscale"])
         : ([
-            [0.0, "#1d4ed8"],
-            [0.25, "#60a5fa"],
-            [0.5, "#f3f4f6"], // light neutral
-            [0.75, "#fb7185"],
-            [1.0, "#b91c1c"],
+            [0, "#0ea5e9"], // strong blue for -1
+            [0.5, "#f9fafb"], // light neutral around 0
+            [1, "#dc2626"], // strong red for +1
           ] as PlotData["colorscale"])),
     [isDark]
   );
@@ -160,20 +156,18 @@ export default function CorrelationMatrixPage() {
       height: 650,
       autosize: true,
       margin: {
-        l: 260,
+        l: 220,
         r: 40,
         t: 30,
-        b: 260,
+        b: 220,
       },
       xaxis: {
         tickangle: -45,
         side: "bottom",
         automargin: true,
-        tickfont: { size: 11 },
       },
       yaxis: {
         automargin: true,
-        tickfont: { size: 11 },
       },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
