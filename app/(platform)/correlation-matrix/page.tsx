@@ -42,7 +42,7 @@ import type { Data, Layout, PlotData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
-  const { theme } = useTheme();
+  useTheme(); // ensure theme provider hydrates; value unused
   const activeBlockId = useBlockStore(
     (state) => state.blocks.find((b) => b.isActive)?.id
   );
@@ -53,7 +53,6 @@ export default function CorrelationMatrixPage() {
   const [normalization, setNormalization] =
     useState<CorrelationNormalization>("raw");
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
-  const isDark = theme === "dark";
 
   const analyticsContext = useMemo(
     () =>
@@ -114,17 +113,16 @@ export default function CorrelationMatrixPage() {
     }
 
     const { strategies, correlationData } = correlationMatrix;
-    const correlationColorscale: PlotData["colorscale"] = [
-      [0.0, "rgb(30, 64, 175)"], // blue-800
-      [0.25, "rgb(59, 130, 246)"], // blue-500
-      [0.5, "rgb(15, 23, 42)"], // slate-950 (near zero)
-      [0.75, "rgb(244, 114, 182)"], // rose-400
-      [1.0, "rgb(159, 18, 57)"], // rose-800
-    ];
 
-    const heatmapTextMatrix = correlationData.map((row) =>
-      row.map((val) => val.toFixed(2))
-    );
+    // High-contrast, dark-mode friendly correlation colorscale.
+    // -1 -> cool blue, 0 -> near-neutral dark slate, +1 -> warm red
+    const correlationColorscale: PlotData["colorscale"] = [
+      [0, "#0f172a"],
+      [0.25, "#38bdf8"],
+      [0.5, "#020617"],
+      [0.75, "#fb7185"],
+      [1, "#fecaca"],
+    ];
 
     const heatmapData: Partial<PlotData> = {
       z: correlationData,
@@ -134,45 +132,50 @@ export default function CorrelationMatrixPage() {
       colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      text: heatmapTextMatrix as unknown as string[],
-      texttemplate: "%{text}",
-      textfont: {
-        size: 10,
-        color: "#e5e7eb", // zinc-200
-      },
-      hovertemplate: "%{y} ↔ %{x}<br>%{z:.2f}<extra></extra>",
-      customdata: correlationData.map((row, yIndex) =>
-        row.map((_, xIndex) => [strategies[yIndex], strategies[xIndex]])
-      ) as unknown as PlotData["customdata"],
-      showscale: false,
+      reversescale: false,
+      hovertemplate: "<b>%{y}</b> ↔ <b>%{x}</b><br>corr: %{z:.2f}<extra></extra>",
+      showscale: true,
     };
 
     const heatmapLayout: Partial<Layout> = {
-      paper_bgcolor: "rgba(0,0,0,0)",
-      plot_bgcolor: "rgba(0,0,0,0)",
+      title: "",
+      height: 650,
+      autosize: true,
+      margin: {
+        l: 220,
+        r: 40,
+        t: 30,
+        b: 220,
+      },
       xaxis: {
-        side: "bottom",
-        tickangle: 45,
-        tickmode: "linear",
+        tickmode: "array",
+        tickvals: strategies,
+        ticktext: strategies,
+        tickangle: -45,
         automargin: true,
+        side: "bottom",
         showgrid: false,
         zeroline: false,
-        tickfont: { size: 10, color: "#9ca3af" },
+        tickfont: {
+          size: 11,
+          color: "#e5e7eb",
+        },
       },
       yaxis: {
-        autorange: "reversed",
-        tickmode: "linear",
         automargin: true,
         showgrid: false,
         zeroline: false,
-        tickfont: { size: 10, color: "#9ca3af" },
+        tickfont: {
+          size: 11,
+          color: "#e5e7eb",
+        },
       },
-      margin: {
-        l: 150,
-        r: 20,
-        t: 20,
-        b: 160,
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: {
+        color: "#e5e7eb",
       },
+      dragmode: false,
     };
 
     return { plotData: [heatmapData as unknown as Data], layout: heatmapLayout };
