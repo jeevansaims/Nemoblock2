@@ -114,8 +114,13 @@ const CorrelationMatrixTable = ({ result }: { result: MultiCorrelationResult }) 
             <tr>
               <th className="p-2 text-left text-muted-foreground">Strategy</th>
               {strategies.map((s) => (
-                <th key={s} className="p-2 text-center text-muted-foreground">
-                  {s}
+                <th
+                  key={s}
+                  className="min-w-[90px] p-2 text-center align-bottom text-muted-foreground"
+                >
+                  <div className="origin-bottom-left -rotate-45 whitespace-nowrap text-[11px] leading-4">
+                    {s}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -249,7 +254,7 @@ export function MultiCorrelationPanel({ series, initialMethod }: MultiCorrelatio
 
         <MetricsRow result={result} />
 
-        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-4">
           <CorrelationMatrixTable result={result} />
           <ClusterTable result={result} />
         </div>
