@@ -67,6 +67,7 @@ const getTradeLots = (trade: Trade) => {
 };
 
 type SizingMode = "actual" | "normalized" | "kelly" | "halfKelly";
+type CalendarMetric = "pl" | "rom" | "running";
 
 const KELLY_MAX_FRACTION = 0.25;
 const KELLY_BASE_EQUITY = 100_000;
@@ -223,7 +224,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     null
   );
   const [weeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
-  const [heatmapMetric, setHeatmapMetric] = useState<"pl" | "rom" | "running">("pl");
+  const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
@@ -286,6 +287,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("plCalendarKellyPct", String(Math.round(kellyFraction * 100)));
   }, [kellyFraction]);
+
+  // Month view does not support running metric; fallback to P/L if selected
+  useEffect(() => {
+    if (view === "month" && heatmapMetric === "running") {
+      setHeatmapMetric("pl");
+    }
+  }, [view, heatmapMetric]);
 
   // Aggregate trades by day
   // This useMemo calculates daily stats including win/loss counts and rolling metrics
@@ -448,13 +456,19 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
     const years = Array.from(yearMap.entries())
       .map(([year, monthsMap]) => {
-        const months = Array.from(monthsMap.entries()).map(([month, vals]) => ({
-          month,
-          netPL: vals.netPL,
-          trades: vals.trades,
-          winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
-          romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
-        }));
+        const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => a[0] - b[0]);
+        let running = 0;
+        const months = sortedMonths.map(([month, vals]) => {
+          running += vals.netPL;
+          return {
+            month,
+            netPL: vals.netPL,
+            trades: vals.trades,
+            winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
+            romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
+            runningNetPL: running,
+          };
+        });
 
         const total = months.reduce(
           (acc, m) => {
@@ -1064,7 +1078,7 @@ const allDataStats = useMemo(() => {
               maxMarginForPeriod={maxMarginForMonth}
               drawdownThreshold={drawdownThreshold}
               weeklyMode={weeklyMode}
-              heatmapMetric={heatmapMetric}
+              heatmapMetric={heatmapMetric === "running" ? "pl" : heatmapMetric}
               settings={calendarSettings}
             />
 
