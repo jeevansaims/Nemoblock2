@@ -156,7 +156,7 @@ export default function CorrelationMatrixPage() {
         "<b>%{customdata[0]} ↔ %{customdata[1]}</b><br>Correlation: %{z:.3f}<extra></extra>",
       customdata: correlationData.map((row, yIndex) =>
         row.map((_, xIndex) => [strategies[yIndex], strategies[xIndex]])
-      ),
+      ) as unknown as PlotData["customdata"],
       colorbar: {
         title: { text: "Correlation", side: "right" },
         tickmode: "linear",
