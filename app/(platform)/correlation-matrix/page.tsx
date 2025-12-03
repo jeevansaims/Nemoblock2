@@ -114,15 +114,12 @@ export default function CorrelationMatrixPage() {
     }
 
     const { strategies, correlationData } = correlationMatrix;
-    const tickColor = isDark ? "#e5e7eb" : "#1f2937";
     const correlationColorscale: PlotData["colorscale"] = [
-      [0.0, "#0f172a"],
-      [0.2, "#1e3a8a"],
-      [0.4, "#38bdf8"],
-      [0.5, "#111827"],
-      [0.6, "#fb7185"],
-      [0.8, "#f97316"],
-      [1.0, "#b91c1c"],
+      [0.0, "rgb(30, 64, 175)"], // blue-800
+      [0.25, "rgb(59, 130, 246)"], // blue-500
+      [0.5, "rgb(15, 23, 42)"], // slate-950 (near zero)
+      [0.75, "rgb(244, 114, 182)"], // rose-400
+      [1.0, "rgb(159, 18, 57)"], // rose-800
     ];
 
     const heatmapData: Partial<PlotData> = {
@@ -133,35 +130,17 @@ export default function CorrelationMatrixPage() {
       colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string,
+      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string[][],
       texttemplate: "%{text}",
       textfont: {
         size: 10,
-        color: correlationData.map((row) =>
-          row.map((val) => {
-            // Dynamic text color based on value and theme
-            const absVal = Math.abs(val);
-            if (isDark) {
-              // In dark mode, use lighter text for strong correlations
-              return absVal > 0.5 ? "#ffffff" : "#e2e8f0";
-            } else {
-              // In light mode, use white for strong, black for weak
-              return absVal > 0.5 ? "#ffffff" : "#000000";
-            }
-          })
-        ) as unknown as string,
+        color: "#e5e7eb", // zinc-200
       },
-      hovertemplate:
-        "<b>%{customdata[0]} ↔ %{customdata[1]}</b><br>Correlation: %{z:.3f}<extra></extra>",
+      hovertemplate: "%{y} ↔ %{x}<br>%{z:.2f}<extra></extra>",
       customdata: correlationData.map((row, yIndex) =>
         row.map((_, xIndex) => [strategies[yIndex], strategies[xIndex]])
       ) as unknown as PlotData["customdata"],
-      colorbar: {
-        title: { text: "Correlation", side: "right" },
-        tickmode: "linear",
-        tick0: -1,
-        dtick: 0.5,
-      },
+      showscale: false,
     };
 
     const heatmapLayout: Partial<Layout> = {
@@ -169,27 +148,31 @@ export default function CorrelationMatrixPage() {
       plot_bgcolor: "rgba(0,0,0,0)",
       xaxis: {
         side: "bottom",
-        tickangle: -45,
+        tickangle: 45,
         tickmode: "linear",
         automargin: true,
-        tickfont: { size: 10, color: tickColor },
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
       },
       yaxis: {
         autorange: "reversed",
         tickmode: "linear",
         automargin: true,
-        tickfont: { size: 10, color: tickColor },
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
       },
       margin: {
-        l: 160,
-        r: 60,
-        t: 40,
-        b: 200,
+        l: 150,
+        r: 20,
+        t: 20,
+        b: 160,
       },
     };
 
     return { plotData: [heatmapData as unknown as Data], layout: heatmapLayout };
-  }, [correlationMatrix, isDark]);
+  }, [correlationMatrix]);
 
   const activeBlock = useBlockStore(
     (state) => state.blocks.find((block) => block.id === activeBlockId)
