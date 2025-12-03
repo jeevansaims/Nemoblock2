@@ -42,7 +42,8 @@ import type { Data, Layout, PlotData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function CorrelationMatrixPage() {
-  useTheme(); // ensure theme provider hydrates; value unused
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const activeBlockId = useBlockStore(
     (state) => state.blocks.find((b) => b.isActive)?.id
   );
@@ -107,33 +108,41 @@ export default function CorrelationMatrixPage() {
     return { correlationMatrix: matrix, analytics: stats };
   }, [trades, method, alignment, normalization, dateBasis]);
 
+  const correlationColorscale = useMemo(
+    () =>
+      (isDark
+        ? ([
+            [0, "#0ea5e9"], // strong blue for -1
+            [0.5, "#020617"], // near-neutral around 0 on dark bg
+            [1, "#f97373"], // bright red for +1
+          ] as PlotData["colorscale"])
+        : ([
+            [0, "#0ea5e9"], // strong blue for -1
+            [0.5, "#f9fafb"], // light neutral around 0
+            [1, "#dc2626"], // strong red for +1
+          ] as PlotData["colorscale"])),
+    [isDark]
+  );
+
   const { plotData, layout } = useMemo(() => {
     if (!correlationMatrix) {
       return { plotData: [], layout: {} };
     }
 
     const { strategies, correlationData } = correlationMatrix;
+    const strategyLabels = strategies;
 
-    // High-contrast, dark-mode friendly correlation colorscale.
-    // -1 -> cool blue, 0 -> near-neutral dark slate, +1 -> warm red
-    const correlationColorscale: PlotData["colorscale"] = [
-      [0, "#0f172a"],
-      [0.25, "#38bdf8"],
-      [0.5, "#020617"],
-      [0.75, "#fb7185"],
-      [1, "#fecaca"],
-    ];
-
-    const heatmapData: Partial<PlotData> = {
+    const heatmapTrace: Partial<PlotData> & { zmid?: number } = {
+      x: strategyLabels,
+      y: strategyLabels,
       z: correlationData,
-      x: strategies,
-      y: strategies,
-      type: "heatmap" as const,
+      type: "heatmap",
       colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      reversescale: false,
-      hovertemplate: "<b>%{y}</b> ↔ <b>%{x}</b><br>corr: %{z:.2f}<extra></extra>",
+      zmid: 0,
+      hovertemplate: "%{y} ↔ %{x}<br>corr: %{z:.2f}<extra></extra>",
+      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string[],
       showscale: true,
     };
 
@@ -148,38 +157,31 @@ export default function CorrelationMatrixPage() {
         b: 220,
       },
       xaxis: {
-        tickmode: "array",
-        tickvals: strategies,
-        ticktext: strategies,
         tickangle: -45,
-        automargin: true,
         side: "bottom",
-        showgrid: false,
-        zeroline: false,
-        tickfont: {
-          size: 11,
-          color: "#e5e7eb",
-        },
+        automargin: true,
       },
       yaxis: {
         automargin: true,
-        showgrid: false,
-        zeroline: false,
-        tickfont: {
-          size: 11,
-          color: "#e5e7eb",
-        },
       },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
       font: {
-        color: "#e5e7eb",
+        color: isDark ? "#e5e7eb" : "#020617",
+        size: 10,
+      },
+      coloraxis: {
+        colorbar: {
+          thickness: 14,
+          len: 0.8,
+          xpad: 20,
+        },
       },
       dragmode: false,
     };
 
-    return { plotData: [heatmapData as unknown as Data], layout: heatmapLayout };
-  }, [correlationMatrix]);
+    return { plotData: [heatmapTrace as unknown as Data], layout: heatmapLayout };
+  }, [correlationMatrix, correlationColorscale, isDark]);
 
   const activeBlock = useBlockStore(
     (state) => state.blocks.find((block) => block.id === activeBlockId)
