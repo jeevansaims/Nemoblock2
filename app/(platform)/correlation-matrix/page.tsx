@@ -122,6 +122,10 @@ export default function CorrelationMatrixPage() {
       [1.0, "rgb(159, 18, 57)"], // rose-800
     ];
 
+    const heatmapTextMatrix = correlationData.map((row) =>
+      row.map((val) => val.toFixed(2))
+    );
+
     const heatmapData: Partial<PlotData> = {
       z: correlationData,
       x: strategies,
@@ -130,7 +134,7 @@ export default function CorrelationMatrixPage() {
       colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string[][],
+      text: heatmapTextMatrix as unknown as string[],
       texttemplate: "%{text}",
       textfont: {
         size: 10,
