@@ -36,6 +36,7 @@ import {
   generateExportFilename,
   toCsvRow,
 } from "@/lib/utils/export-helpers";
+import { cn, truncateStrategyName } from "@/lib/utils";
 import { Download, HelpCircle, Info } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { Data, Layout, PlotData } from "plotly.js";
@@ -48,6 +49,8 @@ const formatCompactUsd = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+type ComboSortMode = "netPLDesc" | "netPLAsc" | "winRateDesc" | "corrDesc";
 
 export default function CorrelationMatrixPage() {
   const { theme } = useTheme();
@@ -62,6 +65,8 @@ export default function CorrelationMatrixPage() {
     useState<CorrelationNormalization>("raw");
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
   const isDark = theme === "dark";
+  const [minTriggers, setMinTriggers] = useState<number>(5);
+  const [sortMode, setSortMode] = useState<ComboSortMode>("netPLDesc");
 
   const analyticsContext = useMemo(
     () =>
@@ -241,6 +246,57 @@ export default function CorrelationMatrixPage() {
   const activeBlock = useBlockStore(
     (state) => state.blocks.find((block) => block.id === activeBlockId)
   );
+
+  const comboPairs = useMemo(() => {
+    if (!correlationMatrix) return [];
+    const { strategies, correlationData, pairStats } = correlationMatrix;
+    if (!pairStats) return [];
+
+    const pairs: {
+      a: string;
+      b: string;
+      correlation: number;
+      triggers: number;
+      wins: number;
+      losses: number;
+      winRate: number;
+      netPL: number;
+    }[] = [];
+
+    for (let i = 0; i < strategies.length; i++) {
+      for (let j = i + 1; j < strategies.length; j++) {
+        const combo = pairStats[i]?.[j];
+        if (!combo) continue;
+        if (combo.triggers < minTriggers) continue;
+        pairs.push({
+          a: strategies[i],
+          b: strategies[j],
+          correlation: correlationData[i]?.[j] ?? 0,
+          triggers: combo.triggers,
+          wins: combo.wins,
+          losses: combo.losses,
+          winRate: combo.winRate,
+          netPL: combo.netPL,
+        });
+      }
+    }
+
+    pairs.sort((p1, p2) => {
+      switch (sortMode) {
+        case "netPLAsc":
+          return p1.netPL - p2.netPL;
+        case "winRateDesc":
+          return p2.winRate - p1.winRate;
+        case "corrDesc":
+          return Math.abs(p2.correlation) - Math.abs(p1.correlation);
+        case "netPLDesc":
+        default:
+          return p2.netPL - p1.netPL;
+      }
+    });
+
+    return pairs;
+  }, [correlationMatrix, minTriggers, sortMode]);
 
   const handleDownloadCsv = useCallback(() => {
     if (!correlationMatrix || !activeBlock) {
@@ -592,6 +648,98 @@ export default function CorrelationMatrixPage() {
           />
         </div>
       </div>
+
+      {comboPairs.length > 0 && (
+        <div className="mt-6 space-y-3">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Min combo triggers</span>
+              <input
+                type="number"
+                min={1}
+                className="w-20 rounded-md border bg-background px-2 py-1 text-xs"
+                value={minTriggers}
+                onChange={(e) => {
+                  const v = Number(e.target.value || 0);
+                  setMinTriggers(v > 0 ? v : 1);
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sort by</span>
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as ComboSortMode)}
+              >
+                <option value="netPLDesc">Net P/L (high → low)</option>
+                <option value="netPLAsc">Net P/L (low → high)</option>
+                <option value="winRateDesc">Win% (high → low)</option>
+                <option value="corrDesc">|Correlation| (high → low)</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-muted-foreground">
+              Showing <span className="font-semibold">{comboPairs.length}</span> combos
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-muted/40 p-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Top combos by{" "}
+              {sortMode === "netPLDesc"
+                ? "Net P/L"
+                : sortMode === "netPLAsc"
+                ? "Net P/L (low → high)"
+                : sortMode === "winRateDesc"
+                ? "Win%"
+                : "|Correlation|"}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2 text-left">Pair</th>
+                    <th className="px-2 py-1 text-right">Corr</th>
+                    <th className="px-2 py-1 text-right">Triggers</th>
+                    <th className="px-2 py-1 text-right">Wins/Losses</th>
+                    <th className="px-2 py-1 text-right">Win%</th>
+                    <th className="px-2 py-1 text-right">Net P/L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comboPairs.slice(0, 20).map((p, idx) => (
+                    <tr key={`${p.a}-${p.b}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
+                      <td className="py-1 pr-2">
+                        <div className="flex flex-col">
+                          <span className="font-medium">
+                            {p.a} <span className="text-muted-foreground">↔</span> {p.b}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-1 text-right">{p.correlation.toFixed(2)}</td>
+                      <td className="px-2 py-1 text-right">{p.triggers}</td>
+                      <td className="px-2 py-1 text-right">
+                        {p.wins}/{p.losses}
+                      </td>
+                      <td className="px-2 py-1 text-right">{p.winRate.toFixed(1)}%</td>
+                      <td
+                        className={cn(
+                          "px-2 py-1 text-right font-semibold",
+                          p.netPL >= 0 ? "text-emerald-400" : "text-rose-400"
+                        )}
+                      >
+                        {formatCompactUsd(p.netPL)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Analysis */}
       {analytics && (
