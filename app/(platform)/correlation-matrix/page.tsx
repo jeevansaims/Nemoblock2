@@ -51,6 +51,8 @@ const formatCompactUsd = (value: number) =>
   }).format(value);
 
 type ComboSortMode = "netPLDesc" | "netPLAsc" | "winRateDesc" | "corrDesc";
+type ComboSortKey = "corr" | "triggers" | "winRate" | "netPL";
+type ComboSortDir = "asc" | "desc";
 
 export default function CorrelationMatrixPage() {
   const { theme } = useTheme();
@@ -67,6 +69,8 @@ export default function CorrelationMatrixPage() {
   const isDark = theme === "dark";
   const [minTriggers, setMinTriggers] = useState<number>(5);
   const [sortMode, setSortMode] = useState<ComboSortMode>("netPLDesc");
+  const [comboSortKey, setComboSortKey] = useState<ComboSortKey>("netPL");
+  const [comboSortDir, setComboSortDir] = useState<ComboSortDir>("desc");
 
   const analyticsContext = useMemo(
     () =>
@@ -263,8 +267,10 @@ export default function CorrelationMatrixPage() {
       netPL: number;
     }[] = [];
 
-    for (let i = 0; i < strategies.length; i++) {
-      for (let j = i + 1; j < strategies.length; j++) {
+    const n = strategies.length;
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
         const combo = pairStats[i]?.[j];
         if (!combo) continue;
         if (combo.triggered < minTriggers) continue;
@@ -282,21 +288,33 @@ export default function CorrelationMatrixPage() {
     }
 
     pairs.sort((p1, p2) => {
-      switch (sortMode) {
-        case "netPLAsc":
-          return p1.netPL - p2.netPL;
-        case "winRateDesc":
-          return p2.winRate - p1.winRate;
-        case "corrDesc":
-          return Math.abs(p2.correlation) - Math.abs(p1.correlation);
-        case "netPLDesc":
+      const dir = comboSortDir === "asc" ? 1 : -1;
+      switch (comboSortKey) {
+        case "corr":
+          return dir * (Math.abs(p1.correlation) - Math.abs(p2.correlation));
+        case "triggers":
+          return dir * (p1.triggers - p2.triggers);
+        case "winRate":
+          return dir * (p1.winRate - p2.winRate);
+        case "netPL":
         default:
-          return p2.netPL - p1.netPL;
+          return dir * (p1.netPL - p2.netPL);
       }
     });
 
     return pairs;
-  }, [correlationMatrix, minTriggers, sortMode]);
+  }, [correlationMatrix, minTriggers, comboSortKey, comboSortDir]);
+
+  const handleComboSortClick = (key: ComboSortKey) => {
+    setComboSortKey((prevKey) => {
+      if (prevKey === key) {
+        setComboSortDir((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return prevKey;
+      }
+      setComboSortDir("desc");
+      return key;
+    });
+  };
 
   const handleDownloadCsv = useCallback(() => {
     if (!correlationMatrix || !activeBlock) {
@@ -664,52 +682,68 @@ export default function CorrelationMatrixPage() {
                   setMinTriggers(v > 0 ? v : 1);
                 }}
               />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sort by</span>
-              <select
-                className="rounded-md border bg-background px-2 py-1 text-xs"
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value as ComboSortMode)}
+              <button
+                type="button"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] text-muted-foreground hover:bg-muted/40"
+                title="Combos = days when both strategies have trades. Filters and stats below use only those overlapping days."
               >
-                <option value="netPLDesc">Net P/L (high → low)</option>
-                <option value="netPLAsc">Net P/L (low → high)</option>
-                <option value="winRateDesc">Win% (high → low)</option>
-                <option value="corrDesc">|Correlation| (high → low)</option>
-              </select>
+                ?
+              </button>
             </div>
 
             <div className="text-xs text-muted-foreground">
-              Showing <span className="font-semibold">{comboPairs.length}</span> combos
+              Showing <span className="font-semibold">{comboPairs.length}</span> combos matching filters
             </div>
           </div>
 
           <div className="rounded-xl border bg-muted/40 p-3">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Top combos by{" "}
-              {sortMode === "netPLDesc"
-                ? "Net P/L"
-                : sortMode === "netPLAsc"
-                ? "Net P/L (low → high)"
-                : sortMode === "winRateDesc"
-                ? "Win%"
-                : "|Correlation|"}
+              Combo stats (co-trading days)
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
                   <tr>
                     <th className="py-1 pr-2 text-left">Pair</th>
-                    <th className="px-2 py-1 text-right">Corr</th>
-                    <th className="px-2 py-1 text-right">Triggers</th>
-                    <th className="px-2 py-1 text-right">Wins/Losses</th>
-                    <th className="px-2 py-1 text-right">Win%</th>
-                    <th className="px-2 py-1 text-right">Net P/L</th>
+                    <th
+                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                      onClick={() => handleComboSortClick("corr")}
+                    >
+                      Corr
+                      {comboSortKey === "corr" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                    </th>
+                    <th
+                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                      onClick={() => handleComboSortClick("triggers")}
+                    >
+                      Triggers
+                      {comboSortKey === "triggers" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                    </th>
+                    <th
+                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                      onClick={() => handleComboSortClick("winRate")}
+                    >
+                      Wins/Losses
+                      {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                    </th>
+                    <th
+                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                      onClick={() => handleComboSortClick("winRate")}
+                    >
+                      Win%
+                      {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                    </th>
+                    <th
+                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                      onClick={() => handleComboSortClick("netPL")}
+                    >
+                      Net P/L
+                      {comboSortKey === "netPL" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {comboPairs.slice(0, 20).map((p, idx) => (
+                  {comboPairs.slice(0, 50).map((p, idx) => (
                     <tr key={`${p.a}-${p.b}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
                       <td className="py-1 pr-2">
                         <div className="flex flex-col">
