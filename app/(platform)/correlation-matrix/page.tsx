@@ -535,33 +535,6 @@ export default function CorrelationMatrixPage() {
           <CardTitle className="text-lg">Calculation Settings</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-center gap-3 pb-4">
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sizing</span>
-              <div className="inline-flex gap-1 rounded-lg border border-border/60 bg-background px-1 py-0.5">
-                {[
-                  { id: "actual", label: "Actual" },
-                  { id: "oneLot", label: "1-lot" },
-                  { id: "kelly", label: "Kelly" },
-                  { id: "halfKelly", label: "1/2 Kelly" },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={cn(
-                      "rounded-md px-2 py-0.5 text-[11px]",
-                      sizingMode === opt.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted/40"
-                    )}
-                    onClick={() => setSizingMode(opt.id as SizingMode)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {/* Method */}
             <div className="space-y-2">
@@ -831,6 +804,32 @@ export default function CorrelationMatrixPage() {
                 <option value={3}>3-way</option>
                 <option value={4}>4-way</option>
               </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sizing</span>
+              <div className="inline-flex gap-1 rounded-lg border border-border/60 bg-background px-1 py-0.5">
+                {[
+                  { id: "actual", label: "Actual" },
+                  { id: "oneLot", label: "1-lot" },
+                  { id: "kelly", label: "Kelly" },
+                  { id: "halfKelly", label: "1/2 Kelly" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={cn(
+                      "rounded-md px-2 py-0.5 text-[11px]",
+                      sizingMode === opt.id
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted/40"
+                    )}
+                    onClick={() => setSizingMode(opt.id as SizingMode)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="text-xs text-muted-foreground">
