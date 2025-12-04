@@ -42,6 +42,14 @@ import { useTheme } from "next-themes";
 import type { Data, Layout } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+const formatCompactUsd = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+
 export default function CorrelationMatrixPage() {
   const { theme } = useTheme();
   const activeBlockId = useBlockStore(
@@ -107,6 +115,36 @@ export default function CorrelationMatrixPage() {
 
     return { correlationMatrix: matrix, analytics: stats };
   }, [trades, method, alignment, normalization, dateBasis]);
+
+  const comboStats = useMemo(() => {
+    if (!correlationMatrix) return [];
+    const { strategies, pairStats } = correlationMatrix;
+    const rows: {
+      pair: string;
+      triggered: number;
+      wins: number;
+      losses: number;
+      winRate: number;
+      netPL: number;
+    }[] = [];
+
+    for (let i = 0; i < strategies.length; i++) {
+      for (let j = i + 1; j < strategies.length; j++) {
+        const stats = pairStats?.[i]?.[j];
+        if (!stats) continue;
+        rows.push({
+          pair: `${strategies[i]} ↔ ${strategies[j]}`,
+          triggered: stats.triggered,
+          wins: stats.wins,
+          losses: stats.losses,
+          winRate: stats.winRate,
+          netPL: stats.netPL,
+        });
+      }
+    }
+
+    return rows.sort((a, b) => b.triggered - a.triggered);
+  }, [correlationMatrix]);
 
   const { plotData, layout } = useMemo(() => {
     if (!correlationMatrix) {
@@ -624,6 +662,50 @@ export default function CorrelationMatrixPage() {
                   {analytics.strategyCount} strategies · {analyticsContext}
                 </div>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {comboStats.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Combo Stats</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="px-2 py-1">Pair</th>
+                    <th className="px-2 py-1 text-right">Triggered</th>
+                    <th className="px-2 py-1 text-right">Wins</th>
+                    <th className="px-2 py-1 text-right">Losses</th>
+                    <th className="px-2 py-1 text-right">Win %</th>
+                    <th className="px-2 py-1 text-right">Net P/L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comboStats.slice(0, 30).map((row) => (
+                    <tr key={row.pair} className="border-t border-border/40">
+                      <td className="px-2 py-1">{row.pair}</td>
+                      <td className="px-2 py-1 text-right font-mono text-xs">{row.triggered}</td>
+                      <td className="px-2 py-1 text-right font-mono text-xs text-emerald-500">
+                        {row.wins}
+                      </td>
+                      <td className="px-2 py-1 text-right font-mono text-xs text-rose-500">
+                        {row.losses}
+                      </td>
+                      <td className="px-2 py-1 text-right font-mono text-xs">
+                        {row.winRate.toFixed(1)}%
+                      </td>
+                      <td className="px-2 py-1 text-right font-mono text-xs">
+                        {formatCompactUsd(row.netPL)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
