@@ -7,6 +7,7 @@ import { MissedProfitDashboard } from "@/components/tp-optimizer/MissedProfitDas
 import { StrategyComparison } from "@/components/tp-optimizer/StrategyComparison";
 import { StrategyTPSummaryTable } from "@/components/tp-optimizer/StrategyTPSummaryTable";
 import { SingleTPStrategyTable } from "@/components/tp-optimizer/SingleTPStrategyTable";
+import { CapitalSimPanel } from "@/components/tp-optimizer/CapitalSimPanel";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { MissedProfitTrade } from "@/lib/analytics/missed-profit-analyzer";
@@ -129,6 +130,7 @@ export default function TpOptimizerPage() {
           <StrategyComparison trades={missedProfitTrades} />
           <StrategyTPSummaryTable rows={tpSummaryRows} />
           <SingleTPStrategyTable rows={singleTPSummary} />
+          <CapitalSimPanel trades={missedProfitTrades} />
         </div>
       )}
     </WorkspaceShell>

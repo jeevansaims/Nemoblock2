@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { AvgPLDashboard } from "@/components/analytics/AvgPLDashboard";
+import { PLAnalyticsPanel } from "@/components/pl-analytics/PLAnalyticsPanel";
 import { NoActiveBlock } from "@/components/no-active-block";
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { RawTrade } from "@/lib/analytics/pl-analytics";
 import { getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
@@ -49,9 +50,19 @@ export default function PlAnalyticsPage() {
     fetchData();
   }, [activeBlock]);
 
-  if (!activeBlock) {
-    return <NoActiveBlock />;
-  }
+  const rawTrades: RawTrade[] = useMemo(
+    () =>
+      trades.map((t, idx) => ({
+        id: t.timeOpened ? `${t.dateOpened}-${t.timeOpened}` : String(idx),
+        openedOn: new Date(t.dateOpened),
+        closedOn: t.dateClosed ? new Date(t.dateClosed) : new Date(t.dateOpened),
+        pl: t.pl || 0,
+        premium: t.premium,
+        marginReq: t.marginReq,
+        contracts: t.numContracts,
+      })),
+    [trades]
+  );
 
   return (
     <WorkspaceShell
@@ -59,12 +70,18 @@ export default function PlAnalyticsPage() {
       label="New"
       description="Average P/L statistics and monthly withdrawal simulator."
     >
-      {isLoadingData ? (
+      {!activeBlock ? (
+        <NoActiveBlock />
+      ) : isLoadingData ? (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
           <p className="text-muted-foreground">Loading trades...</p>
         </div>
+      ) : rawTrades.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          No trades available for this block yet.
+        </div>
       ) : (
-        <AvgPLDashboard trades={trades} />
+        <PLAnalyticsPanel trades={rawTrades} />
       )}
     </WorkspaceShell>
   );

@@ -31,7 +31,6 @@ import {
 import { getBlock, getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
-import { truncateStrategyName } from "@/lib/utils";
 import {
   downloadCsv,
   downloadJson,
@@ -40,7 +39,7 @@ import {
 } from "@/lib/utils/export-helpers";
 import { Download, HelpCircle, Info } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { Data, Layout } from "plotly.js";
+import type { Data, Layout, PlotData } from "plotly.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const formatCompactUsd = (value: number) =>
@@ -63,6 +62,7 @@ export default function CorrelationMatrixPage() {
   const [normalization, setNormalization] =
     useState<CorrelationNormalization>("raw");
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
+  const isDark = theme === "dark";
 
   const analyticsContext = useMemo(
     () =>
@@ -153,65 +153,33 @@ export default function CorrelationMatrixPage() {
     }
 
     const { strategies, correlationData, pairStats } = correlationMatrix;
-    const isDark = theme === "dark";
+    const correlationColorscale: PlotData["colorscale"] = [
+      [0.0, "rgb(30, 64, 175)"], // blue-800
+      [0.25, "rgb(59, 130, 246)"], // blue-500
+      [0.5, "rgb(15, 23, 42)"], // slate-950 (near zero)
+      [0.75, "rgb(244, 114, 182)"], // rose-400
+      [1.0, "rgb(159, 18, 57)"], // rose-800
+    ];
 
-    // Truncate strategy names for axis labels
-    const truncatedStrategies = strategies.map((s) =>
-      truncateStrategyName(s, 40)
+    const heatmapTextMatrix = correlationData.map((row) =>
+      row.map((val) => val.toFixed(2))
     );
 
-    // Create heatmap with better contrast
-    // Different colorscales for light and dark modes
-    const colorscale = isDark
-      ? [
-          // Dark mode: Brighter, more vibrant colors
-          [0, "#1e40af"], // Bright blue for -1
-          [0.25, "#3b82f6"], // Medium bright blue for -0.5
-          [0.45, "#93c5fd"], // Light blue approaching 0
-          [0.5, "#334155"], // Neutral gray for 0
-          [0.55, "#fca5a5"], // Light red leaving 0
-          [0.75, "#ef4444"], // Medium bright red for 0.5
-          [1, "#991b1b"], // Strong red for 1
-        ]
-      : [
-          // Light mode: Darker, more saturated colors
-          [0, "#053061"], // Strong dark blue for -1
-          [0.25, "#2166ac"], // Medium blue for -0.5
-          [0.45, "#d1e5f0"], // Light blue approaching 0
-          [0.5, "#f7f7f7"], // White/light gray for 0
-          [0.55, "#fddbc7"], // Light red leaving 0
-          [0.75, "#d6604d"], // Medium red for 0.5
-          [1, "#67001f"], // Strong dark red for 1
-        ];
-
-    const heatmapData = {
+    const heatmapData: Partial<PlotData> = {
       z: correlationData,
-      x: truncatedStrategies,
-      y: truncatedStrategies,
+      x: strategies,
+      y: strategies,
       type: "heatmap" as const,
-      colorscale,
-      zmid: 0,
+      colorscale: correlationColorscale,
       zmin: -1,
       zmax: 1,
-      text: correlationData.map((row) => row.map((val) => val.toFixed(2))) as unknown as string,
+      text: heatmapTextMatrix as unknown as string[],
       texttemplate: "%{text}",
       textfont: {
         size: 10,
-        color: correlationData.map((row) =>
-          row.map((val) => {
-            // Dynamic text color based on value and theme
-            const absVal = Math.abs(val);
-            if (isDark) {
-              // In dark mode, use lighter text for strong correlations
-              return absVal > 0.5 ? "#ffffff" : "#e2e8f0";
-            } else {
-              // In light mode, use white for strong, black for weak
-              return absVal > 0.5 ? "#ffffff" : "#000000";
-            }
-          })
-        ) as unknown as string,
+        color: "#e5e7eb", // zinc-200
       },
-      // Use full strategy names in hover tooltip
+      hovertemplate: "%{y} ↔ %{x}<br>%{z:.2f}<extra></extra>",
       customdata: correlationData.map((row, yIndex) =>
         row.map((_, xIndex) => {
           const stats = pairStats?.[yIndex]?.[xIndex];
@@ -225,7 +193,7 @@ export default function CorrelationMatrixPage() {
             stats?.netPL ?? 0,
           ];
         })
-      ),
+      ) as unknown as PlotData["customdata"],
       hovertemplate:
         "<b>%{customdata[0]} ↔ %{customdata[1]}</b><br>" +
         "Corr: %{z:.3f}<br>" +
@@ -242,29 +210,35 @@ export default function CorrelationMatrixPage() {
     };
 
     const heatmapLayout: Partial<Layout> = {
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
       xaxis: {
         side: "bottom",
-        tickangle: -45,
+        tickangle: 45,
         tickmode: "linear",
         automargin: true,
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
       },
       yaxis: {
         autorange: "reversed",
         tickmode: "linear",
         automargin: true,
+        showgrid: false,
+        zeroline: false,
+        tickfont: { size: 10, color: "#9ca3af" },
       },
       margin: {
-        l: 200,
-        r: 100,
-        t: 40,
-        b: 200,
+        l: 150,
+        r: 20,
+        t: 20,
+        b: 160,
       },
     };
 
     return { plotData: [heatmapData as unknown as Data], layout: heatmapLayout };
-  }, [correlationMatrix, theme]);
-
-  const isDark = theme === "dark";
+  }, [correlationMatrix]);
 
   const activeBlock = useBlockStore(
     (state) => state.blocks.find((block) => block.id === activeBlockId)
@@ -582,39 +556,44 @@ export default function CorrelationMatrixPage() {
       </Card>
 
       {/* Heatmap */}
-      <ChartWrapper
-        title="Correlation Heatmap"
-        description="Visual representation of strategy correlations"
-        tooltip={{
-          flavor: "Measures how your trading strategies move together over time.",
-          detailed: "Red colors indicate positive correlation (strategies tend to win/lose together), blue indicates negative correlation (strategies move opposite), and white indicates no correlation. Use this to identify diversification opportunities and understand portfolio risk."
-        }}
-        data={plotData}
-        layout={layout}
-        style={{ height: "600px" }}
-        actions={
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadCsv}
-              disabled={!correlationMatrix}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              CSV
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadJson}
-              disabled={!correlationMatrix}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              JSON
-            </Button>
-          </div>
-        }
-      />
+      <div className="mt-2 w-full overflow-x-auto">
+        <div className="min-w-[900px]">
+          <ChartWrapper
+            title="Correlation Heatmap"
+            description="Visual representation of strategy correlations"
+            tooltip={{
+              flavor: "Measures how your trading strategies move together over time.",
+              detailed:
+                "Warm colors indicate positive correlation (strategies tend to win/lose together), cool colors indicate negative correlation (strategies move opposite), and neutral indicates no correlation. Use this to identify diversification opportunities and understand portfolio risk.",
+            }}
+            data={plotData}
+            layout={layout}
+            style={{ height: "600px" }}
+            actions={
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadCsv}
+                  disabled={!correlationMatrix}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadJson}
+                  disabled={!correlationMatrix}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  JSON
+                </Button>
+              </div>
+            }
+          />
+        </div>
+      </div>
 
       {/* Quick Analysis */}
       {analytics && (

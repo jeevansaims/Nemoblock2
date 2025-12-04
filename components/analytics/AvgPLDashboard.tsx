@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,9 +36,27 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
   const weeklyStats = computeAvgWinLoss(weekly);
   const monthlyStats = computeAvgWinLoss(monthly);
 
-  const [startingBalance, setStartingBalance] = useState(100000);
+  const inferredStartingBalance = useMemo(() => {
+    if (trades.length === 0) return 100000;
+    const sorted = [...trades].sort((a, b) => {
+      const da = (a.dateClosed as Date) || (a.dateOpened as Date);
+      const db = (b.dateClosed as Date) || (b.dateOpened as Date);
+      return new Date(da).getTime() - new Date(db).getTime();
+    });
+    const first = sorted[0];
+    return Math.max(0, first.fundsAtClose ?? 100000);
+  }, [trades]);
+
+  const [startingBalance, setStartingBalance] = useState(inferredStartingBalance);
   const [withdrawalPct, setWithdrawalPct] = useState(30);
   const [withdrawOnlyIfProfitable, setWithdrawOnlyIfProfitable] = useState(true);
+  const [withdrawalMode, setWithdrawalMode] = useState<"percent" | "fixed">("percent");
+  const [fixedWithdrawal, setFixedWithdrawal] = useState(1000);
+  const [resetMode, setResetMode] = useState(false);
+
+  useEffect(() => {
+    setStartingBalance(inferredStartingBalance);
+  }, [inferredStartingBalance]);
 
   const withdrawalResult = useMemo(
     () =>
@@ -45,8 +64,18 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
         startingBalance,
         withdrawalPct: withdrawalPct / 100,
         withdrawOnlyIfProfitable,
+        withdrawalMode: resetMode ? "reset" : withdrawalMode,
+        fixedAmount: fixedWithdrawal,
       }),
-    [trades, startingBalance, withdrawalPct, withdrawOnlyIfProfitable]
+    [
+      trades,
+      startingBalance,
+      withdrawalPct,
+      withdrawOnlyIfProfitable,
+      withdrawalMode,
+      fixedWithdrawal,
+      resetMode,
+    ]
   );
 
   const totals = useMemo(() => {
@@ -117,15 +146,63 @@ export function AvgPLDashboard({ trades }: { trades: Trade[] }) {
               />
             </div>
             <div className="space-y-2">
-              <Label>Withdrawal %</Label>
-              <Slider
-                min={0}
-                max={100}
-                step={5}
-                value={[withdrawalPct]}
-                onValueChange={([v]) => setWithdrawalPct(v)}
-              />
-              <div className="text-sm text-muted-foreground">{withdrawalPct}%</div>
+              <Label>Withdrawal mode</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={!resetMode && withdrawalMode === "percent" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setResetMode(false);
+                    setWithdrawalMode("percent");
+                  }}
+                >
+                  Percent
+                </Button>
+                <Button
+                  type="button"
+                  variant={!resetMode && withdrawalMode === "fixed" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setResetMode(false);
+                    setWithdrawalMode("fixed");
+                  }}
+                >
+                  Fixed $
+                </Button>
+                <Button
+                  type="button"
+                  variant={resetMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setResetMode(true)}
+                >
+                  Reset to starting balance
+                </Button>
+              </div>
+              {!resetMode && withdrawalMode === "percent" ? (
+                <>
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={[withdrawalPct]}
+                    onValueChange={([v]) => setWithdrawalPct(v)}
+                  />
+                  <div className="text-sm text-muted-foreground">{withdrawalPct}%</div>
+                </>
+              ) : null}
+              {!resetMode && withdrawalMode === "fixed" ? (
+                <Input
+                  type="number"
+                  value={fixedWithdrawal}
+                  onChange={(e) => setFixedWithdrawal(Number(e.target.value) || 0)}
+                />
+              ) : null}
+              {resetMode && (
+                <div className="text-sm text-muted-foreground">
+                  At month end, withdraw down to starting balance when above it.
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Withdraw only if profitable</Label>

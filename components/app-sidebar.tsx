@@ -12,6 +12,7 @@ import {
   IconSparkles,
   IconStack2,
   IconTimelineEvent,
+  IconTopologyStar3,
 } from "@tabler/icons-react";
 import { Blocks } from "lucide-react";
 import Link from "next/link";
@@ -64,6 +65,12 @@ const navData = {
       title: "Correlation Matrix",
       href: "/correlation-matrix",
       icon: IconChartHistogram,
+    },
+    {
+      title: "Multi-Correlation",
+      href: "/multi-correlation",
+      icon: IconTopologyStar3,
+      badge: "New",
     },
     {
       title: "P/L Calendar",
