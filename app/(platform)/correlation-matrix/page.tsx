@@ -36,7 +36,7 @@ import {
   generateExportFilename,
   toCsvRow,
 } from "@/lib/utils/export-helpers";
-import { cn, truncateStrategyName } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Download, HelpCircle, Info } from "lucide-react";
 import { useTheme } from "next-themes";
 import type { Data, Layout, PlotData } from "plotly.js";
@@ -267,12 +267,12 @@ export default function CorrelationMatrixPage() {
       for (let j = i + 1; j < strategies.length; j++) {
         const combo = pairStats[i]?.[j];
         if (!combo) continue;
-        if (combo.triggers < minTriggers) continue;
+        if (combo.triggered < minTriggers) continue;
         pairs.push({
           a: strategies[i],
           b: strategies[j],
           correlation: correlationData[i]?.[j] ?? 0,
-          triggers: combo.triggers,
+          triggers: combo.triggered,
           wins: combo.wins,
           losses: combo.losses,
           winRate: combo.winRate,
