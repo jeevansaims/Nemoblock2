@@ -32,11 +32,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import { Trade } from "@/lib/models/trade";
-import { usePLCalendarSettings } from "@/lib/hooks/use-pl-calendar-settings";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
 
-import { PLCalendarSettingsMenu } from "./PLCalendarSettingsMenu";
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
@@ -91,6 +89,24 @@ const classifyRegime = (netPL: number, romPct: number | undefined): MarketRegime
   if (netPL > 0) return "TREND_UP";
   if (netPL < 0) return "TREND_DOWN";
   return "CHOPPY";
+};
+
+type MonthSummary = {
+  year: number;
+  monthIndex: number;
+  totalPL: number;
+};
+
+const computeAverageMonthlyPL = (months: MonthSummary[]) => {
+  const totals = Array(12).fill(0);
+  const counts = Array(12).fill(0);
+  months.forEach((m) => {
+    const idx = m.monthIndex;
+    if (idx < 0 || idx > 11) return;
+    totals[idx] += m.totalPL;
+    counts[idx] += 1;
+  });
+  return totals.map((sum, idx) => (counts[idx] > 0 ? sum / counts[idx] : 0));
 };
 
 const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
@@ -220,14 +236,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [drawdownThreshold, setDrawdownThreshold] = useState(10);
-  const [stressRange, setStressRange] = useState<{ p5: number; p50: number; p95: number } | null>(
-    null
-  );
   const [weeklyMode] = useState<"trailing7" | "calendarWeek">("trailing7");
   const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
-  const { settings: calendarSettings, setSettings: setCalendarSettings } = usePLCalendarSettings();
   const [showRomTrendPanel] = useState(true);
 
   const strategies = useMemo(() => {
@@ -490,11 +502,25 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return { years };
   }, [filteredTrades, sizingMode, kellyFraction]);
 
-const allDataStats = useMemo(() => {
-  const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-  let totalPL = 0;
-  filteredTrades.forEach((t) => {
-    totalPL += sizedPLMap.get(t) ?? t.pl;
+  const averageMonthlyPL = useMemo(() => {
+    const months: MonthSummary[] = [];
+    yearlySnapshot.years.forEach((y) => {
+      y.months.forEach((m) => {
+        months.push({
+          year: y.year,
+          monthIndex: m.month,
+          totalPL: m.netPL,
+        });
+      });
+    });
+    return computeAverageMonthlyPL(months);
+  }, [yearlySnapshot]);
+
+  const allDataStats = useMemo(() => {
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+    let totalPL = 0;
+    filteredTrades.forEach((t) => {
+      totalPL += sizedPLMap.get(t) ?? t.pl;
   });
   return { totalPL };
 }, [filteredTrades, sizingMode, kellyFraction]);
@@ -552,33 +578,6 @@ const allDataStats = useMemo(() => {
     });
     
     return max;
-  }, [dailyStats, currentDate]);
-
-  // Simple Monte Carlo stress on current month daily P/L
-  useEffect(() => {
-    const currentMonthStr = format(currentDate, "yyyy-MM");
-    const dailyPl: number[] = [];
-    dailyStats.forEach((stat, key) => {
-      if (key.startsWith(currentMonthStr)) dailyPl.push(stat.netPL);
-    });
-    if (dailyPl.length === 0) {
-      setStressRange(null);
-      return;
-    }
-    const runs = 200;
-    const horizon = Math.max(5, dailyPl.length);
-    const outcomes: number[] = [];
-    for (let i = 0; i < runs; i++) {
-      let total = 0;
-      for (let h = 0; h < horizon; h++) {
-        const pick = dailyPl[Math.floor(Math.random() * dailyPl.length)];
-        total += pick;
-      }
-      outcomes.push(total);
-    }
-    outcomes.sort((a, b) => a - b);
-    const pct = (p: number) => outcomes[Math.floor((p / 100) * outcomes.length)];
-    setStressRange({ p5: pct(5), p50: pct(50), p95: pct(95) });
   }, [dailyStats, currentDate]);
 
   const exportMonthCsv = () => {
@@ -1102,6 +1101,28 @@ const allDataStats = useMemo(() => {
                 setView("month");
               }}
             />
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                Average Monthly P/L (across visible years)
+              </h3>
+              <div className="grid grid-cols-12 gap-1 text-xs">
+                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
+                  const value = averageMonthlyPL[idx] ?? 0;
+                  const positive = value >= 0;
+                  return (
+                    <div
+                      key={label}
+                      className="rounded-md bg-muted/40 px-1.5 py-1 text-center"
+                    >
+                      <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
+                      <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
+                        {formatCompactUsd(value)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             {heatmapMetric === "rom" && showRomTrendPanel && romTrend?.rolling7.length ? (
               <RomTrendChart
                 series={romTrend.rolling7}
@@ -1117,50 +1138,6 @@ const allDataStats = useMemo(() => {
           </div>
         )}
       </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Period snapshot & stress</CardTitle>
-            <PLCalendarSettingsMenu
-              settings={calendarSettings}
-              onChange={setCalendarSettings}
-            />
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-5">
-          <div>
-            <p className="text-xs text-muted-foreground">Net P/L</p>
-            <p className={cn("text-lg font-semibold", periodStats.netPL >= 0 ? "text-emerald-500" : "text-rose-500")}>
-              {formatCompactUsd(periodStats.netPL)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Trades</p>
-            <p className="text-lg font-semibold">{periodStats.tradeCount}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Win Rate</p>
-            <p className="text-lg font-semibold">{periodStats.winRate}%</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Rolling 7d</p>
-            <p className={cn("text-lg font-semibold", periodStats.rolling7d >= 0 ? "text-emerald-500" : "text-rose-500")}>
-              {formatCompactUsd(periodStats.rolling7d)}
-            </p>
-          </div>
-          {stressRange && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">MC stress (p5 / p50 / p95)</p>
-              <p className="text-sm font-semibold">
-                <span className="text-rose-500">{formatCompactUsd(stressRange.p5)}</span>{" "}
-                / {formatCompactUsd(stressRange.p50)}{" "}
-                <span className="text-emerald-500">{formatCompactUsd(stressRange.p95)}</span>
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       <DailyDetailModal
         open={isModalOpen}
