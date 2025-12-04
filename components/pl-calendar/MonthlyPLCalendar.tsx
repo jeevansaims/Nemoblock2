@@ -27,7 +27,7 @@ interface MonthlyPLCalendarProps {
   drawdownThreshold?: number;
   weeklyMode: "trailing7" | "calendarWeek";
   heatmapMetric: "pl" | "rom" | "running";
-  settings: import("@/lib/settings/pl-calendar-settings").PLCalendarSettings;
+  settings?: import("@/lib/settings/pl-calendar-settings").PLCalendarSettings;
 }
 
 export function MonthlyPLCalendar({
@@ -39,7 +39,7 @@ export function MonthlyPLCalendar({
   drawdownThreshold = 10,
   weeklyMode,
   heatmapMetric,
-  settings,
+  settings = defaultPLCalendarSettings,
 }: MonthlyPLCalendarProps) {
   const safeSettings: PLCalendarSettings = {
     ...defaultPLCalendarSettings,
