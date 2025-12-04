@@ -38,7 +38,6 @@ import { getTradingDayKey } from "@/lib/utils/trading-day";
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
-import { RomTrendChart } from "./RomTrendChart";
 import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
 
 interface PLCalendarPanelProps {
@@ -89,24 +88,6 @@ const classifyRegime = (netPL: number, romPct: number | undefined): MarketRegime
   if (netPL > 0) return "TREND_UP";
   if (netPL < 0) return "TREND_DOWN";
   return "CHOPPY";
-};
-
-type MonthSummary = {
-  year: number;
-  monthIndex: number;
-  totalPL: number;
-};
-
-const computeAverageMonthlyPL = (months: MonthSummary[]) => {
-  const totals = Array(12).fill(0);
-  const counts = Array(12).fill(0);
-  months.forEach((m) => {
-    const idx = m.monthIndex;
-    if (idx < 0 || idx > 11) return;
-    totals[idx] += m.totalPL;
-    counts[idx] += 1;
-  });
-  return totals.map((sum, idx) => (counts[idx] > 0 ? sum / counts[idx] : 0));
 };
 
 const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
@@ -240,7 +221,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
-  const [showRomTrendPanel] = useState(true);
 
   const strategies = useMemo(() => {
     const s = new Set<string>();
@@ -502,18 +482,28 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return { years };
   }, [filteredTrades, sizingMode, kellyFraction]);
 
-  const averageMonthlyPL = useMemo(() => {
-    const months: MonthSummary[] = [];
+  const averageMonthlyStats = useMemo(() => {
+    const months = Array.from({ length: 12 }, () => ({
+      sumPL: 0,
+      sumRom: 0,
+      count: 0,
+    }));
+
     yearlySnapshot.years.forEach((y) => {
       y.months.forEach((m) => {
-        months.push({
-          year: y.year,
-          monthIndex: m.month,
-          totalPL: m.netPL,
-        });
+        const idx = m.month;
+        if (idx < 0 || idx > 11) return;
+        months[idx].sumPL += m.netPL;
+        months[idx].sumRom += m.romPct ?? 0;
+        months[idx].count += 1;
       });
     });
-    return computeAverageMonthlyPL(months);
+
+    return months.map((m, monthIndex) => ({
+      monthIndex,
+      avgPL: m.count > 0 ? m.sumPL / m.count : 0,
+      avgRom: m.count > 0 ? m.sumRom / m.count : 0,
+    }));
   }, [yearlySnapshot]);
 
   const allDataStats = useMemo(() => {
@@ -1104,10 +1094,18 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
               <h3 className="text-sm font-medium text-muted-foreground">
                 Average Monthly P/L (across visible years)
               </h3>
-              <div className="grid grid-cols-12 gap-1 text-xs">
+              <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
-                  const value = averageMonthlyPL[idx] ?? 0;
+                  const stats = averageMonthlyStats[idx];
+                  const value =
+                    heatmapMetric === "rom"
+                      ? stats?.avgRom ?? 0
+                      : stats?.avgPL ?? 0;
                   const positive = value >= 0;
+                  const formatted =
+                    heatmapMetric === "rom"
+                      ? `${value.toFixed(1)}%`
+                      : formatCompactUsd(value);
                   return (
                     <div
                       key={label}
@@ -1115,25 +1113,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                     >
                       <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
                       <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
-                        {formatCompactUsd(value)}
+                        {formatted}
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-            {heatmapMetric === "rom" && showRomTrendPanel && romTrend?.rolling7.length ? (
-              <RomTrendChart
-                series={romTrend.rolling7}
-                label="Rolling 7-day ROM%"
-              />
-            ) : null}
-            {heatmapMetric === "rom" && showRomTrendPanel && romTrend?.rolling14.length ? (
-              <RomTrendChart
-                series={romTrend.rolling14}
-                label="Rolling 14-day ROM%"
-              />
-            ) : null}
           </div>
         )}
       </div>
