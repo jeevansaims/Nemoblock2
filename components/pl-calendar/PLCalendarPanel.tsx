@@ -1074,7 +1074,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
               drawdownThreshold={drawdownThreshold}
               weeklyMode={weeklyMode}
               heatmapMetric={heatmapMetric}
-              settings={calendarSettings}
             />
 
             {weeklyStats.length > 0 && (
