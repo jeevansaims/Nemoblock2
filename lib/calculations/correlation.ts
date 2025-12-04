@@ -93,7 +93,16 @@ export function calculateCorrelationMatrix(
     const identityMatrix = strategies.map((_, i) =>
       strategies.map((_, j) => (i === j ? 1.0 : 0.0))
     );
-    return { strategies, correlationData: identityMatrix };
+    const emptyStats = strategies.map(() =>
+      strategies.map(() => ({
+        triggered: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        netPL: 0,
+      }))
+    );
+    return { strategies, correlationData: identityMatrix, pairStats: emptyStats };
   }
 
   const correlationData: number[][] = [];
