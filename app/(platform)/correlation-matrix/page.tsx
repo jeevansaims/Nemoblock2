@@ -26,7 +26,6 @@ import {
   CorrelationMethod,
   CorrelationMatrix,
   CorrelationNormalization,
-  PairStats,
 } from "@/lib/calculations/correlation";
 import { getBlock, getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
@@ -179,7 +178,6 @@ export default function CorrelationMatrixPage() {
         size: 10,
         color: "#e5e7eb", // zinc-200
       },
-      hovertemplate: "%{y} ↔ %{x}<br>%{z:.2f}<extra></extra>",
       customdata: correlationData.map((row, yIndex) =>
         row.map((_, xIndex) => {
           const stats = pairStats?.[yIndex]?.[xIndex];
