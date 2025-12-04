@@ -50,7 +50,7 @@ const formatCompactUsd = (value: number) =>
     maximumFractionDigits: 1,
   }).format(value);
 
-type ComboSortMode = "netPLDesc" | "netPLAsc" | "winRateDesc" | "corrDesc";
+type ComboSize = 2 | 3 | 4;
 type ComboSortKey = "corr" | "triggers" | "winRate" | "netPL";
 type ComboSortDir = "asc" | "desc";
 
@@ -68,9 +68,49 @@ export default function CorrelationMatrixPage() {
   const [dateBasis, setDateBasis] = useState<CorrelationDateBasis>("opened");
   const isDark = theme === "dark";
   const [minTriggers, setMinTriggers] = useState<number>(5);
-  const [sortMode, setSortMode] = useState<ComboSortMode>("netPLDesc");
+  const [comboSize, setComboSize] = useState<ComboSize>(2);
   const [comboSortKey, setComboSortKey] = useState<ComboSortKey>("netPL");
   const [comboSortDir, setComboSortDir] = useState<ComboSortDir>("desc");
+
+  const normalizeReturnLocal = (trade: Trade, mode: CorrelationNormalization) => {
+    switch (mode) {
+      case "margin":
+        if (!trade.marginReq) return null;
+        return trade.pl / trade.marginReq;
+      case "notional": {
+        const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
+        if (!notional) return null;
+        return trade.pl / notional;
+      }
+      default:
+        return trade.pl;
+    }
+  };
+
+  const getTradeDateKeyLocal = (trade: Trade, basis: CorrelationDateBasis): string | null => {
+    const date = basis === "closed" ? trade.dateClosed : trade.dateOpened;
+    if (!date) return null;
+    return date.toISOString().split("T")[0];
+  };
+
+  const kCombinations = <T,>(items: T[], k: number): T[][] => {
+    const result: T[][] = [];
+    const n = items.length;
+    const combo: T[] = [];
+    const backtrack = (start: number) => {
+      if (combo.length === k) {
+        result.push([...combo]);
+        return;
+      }
+      for (let i = start; i < n; i++) {
+        combo.push(items[i]);
+        backtrack(i + 1);
+        combo.pop();
+      }
+    };
+    if (k <= n) backtrack(0);
+    return result;
+  };
 
   const analyticsContext = useMemo(
     () =>
@@ -253,39 +293,87 @@ export default function CorrelationMatrixPage() {
 
   const comboPairs = useMemo(() => {
     if (!correlationMatrix) return [];
-    const { strategies, correlationData, pairStats } = correlationMatrix;
-    if (!pairStats) return [];
+    const { strategies, correlationData } = correlationMatrix;
 
-    const pairs: {
-      a: string;
-      b: string;
-      correlation: number;
-      triggers: number;
-      wins: number;
-      losses: number;
-      winRate: number;
-      netPL: number;
-    }[] = [];
+    const dailyMap: Record<string, Record<string, number>> = {};
+    trades.forEach((trade) => {
+      if (!trade.strategy || trade.strategy.trim() === "") return;
+      const dateKey = getTradeDateKeyLocal(trade, dateBasis);
+      if (!dateKey) return;
+      const pl = normalizeReturnLocal(trade, normalization);
+      if (pl === null) return;
+      if (!dailyMap[dateKey]) dailyMap[dateKey] = {};
+      dailyMap[dateKey][trade.strategy] = (dailyMap[dateKey][trade.strategy] ?? 0) + pl;
+    });
 
-    const n = strategies.length;
+    const comboMap = new Map<
+      string,
+      {
+        strategies: string[];
+        triggers: number;
+        wins: number;
+        losses: number;
+        netPL: number;
+        corrAvg: number;
+      }
+    >();
 
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const combo = pairStats[i]?.[j];
-        if (!combo) continue;
-        if (combo.triggered < minTriggers) continue;
-        pairs.push({
-          a: strategies[i],
-          b: strategies[j],
-          correlation: correlationData[i]?.[j] ?? 0,
-          triggers: combo.triggered,
-          wins: combo.wins,
-          losses: combo.losses,
-          winRate: combo.winRate,
-          netPL: combo.netPL,
-        });
+    for (const [, plByStrategy] of Object.entries(dailyMap)) {
+      const active = Object.entries(plByStrategy)
+        .filter(([, pl]) => pl !== 0 && !Number.isNaN(pl))
+        .map(([name]) => name);
+
+      if (active.length < comboSize) continue;
+
+      const combos = kCombinations(active, comboSize);
+      for (const combo of combos) {
+        const sorted = [...combo].sort();
+        const key = sorted.join(" | ");
+        const dayPL = sorted.reduce((sum, strat) => sum + (plByStrategy[strat] ?? 0), 0);
+
+        let stats = comboMap.get(key);
+        if (!stats) {
+          let corrSum = 0;
+          let corrCount = 0;
+          for (let i = 0; i < sorted.length; i++) {
+            for (let j = i + 1; j < sorted.length; j++) {
+              const si = strategies.indexOf(sorted[i]);
+              const sj = strategies.indexOf(sorted[j]);
+              const c = si >= 0 && sj >= 0 ? Math.abs(correlationData[si]?.[sj] ?? 0) : 0;
+              corrSum += c;
+              corrCount += 1;
+            }
+          }
+          const corrAvg = corrCount > 0 ? corrSum / corrCount : 0;
+          stats = {
+            strategies: sorted,
+            triggers: 0,
+            wins: 0,
+            losses: 0,
+            netPL: 0,
+            corrAvg,
+          };
+          comboMap.set(key, stats);
+        }
+
+        stats.triggers += 1;
+        stats.netPL += dayPL;
+        if (dayPL > 0) stats.wins += 1;
+        else if (dayPL < 0) stats.losses += 1;
       }
     }
+
+    const pairs = Array.from(comboMap.values())
+      .map((c) => ({
+        strategies: c.strategies,
+        correlation: c.corrAvg,
+        triggers: c.triggers,
+        wins: c.wins,
+        losses: c.losses,
+        winRate: c.triggers > 0 ? c.wins / c.triggers : 0,
+        netPL: c.netPL,
+      }))
+      .filter((c) => c.triggers >= minTriggers);
 
     pairs.sort((p1, p2) => {
       const dir = comboSortDir === "asc" ? 1 : -1;
@@ -303,7 +391,7 @@ export default function CorrelationMatrixPage() {
     });
 
     return pairs;
-  }, [correlationMatrix, minTriggers, comboSortKey, comboSortDir]);
+  }, [correlationMatrix, trades, dateBasis, normalization, comboSize, minTriggers, comboSortKey, comboSortDir]);
 
   const handleComboSortClick = (key: ComboSortKey) => {
     setComboSortKey((prevKey) => {
@@ -678,8 +766,8 @@ export default function CorrelationMatrixPage() {
                 className="w-20 rounded-md border bg-background px-2 py-1 text-xs"
                 value={minTriggers}
                 onChange={(e) => {
-                  const v = Number(e.target.value || 0);
-                  setMinTriggers(v > 0 ? v : 1);
+                  const raw = Number(e.target.value || 0);
+                  setMinTriggers(raw > 0 ? raw : 1);
                 }}
               />
               <button
@@ -689,6 +777,19 @@ export default function CorrelationMatrixPage() {
               >
                 ?
               </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Combo size</span>
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                value={comboSize}
+                onChange={(e) => setComboSize(Number(e.target.value) as ComboSize)}
+              >
+                <option value={2}>2-way</option>
+                <option value={3}>3-way</option>
+                <option value={4}>4-way</option>
+              </select>
             </div>
 
             <div className="text-xs text-muted-foreground">
@@ -704,7 +805,7 @@ export default function CorrelationMatrixPage() {
               <table className="w-full text-xs">
                 <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
                   <tr>
-                    <th className="py-1 pr-2 text-left">Pair</th>
+                    <th className="py-1 pr-2 text-left">Combo (size {comboSize})</th>
                     <th
                       className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
                       onClick={() => handleComboSortClick("corr")}
@@ -744,11 +845,11 @@ export default function CorrelationMatrixPage() {
                 </thead>
                 <tbody>
                   {comboPairs.slice(0, 50).map((p, idx) => (
-                    <tr key={`${p.a}-${p.b}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
+                    <tr key={`${p.strategies.join("|")}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
                       <td className="py-1 pr-2">
                         <div className="flex flex-col">
                           <span className="font-medium">
-                            {p.a} <span className="text-muted-foreground">↔</span> {p.b}
+                            {p.strategies.join(" • ")}
                           </span>
                         </div>
                       </td>
@@ -757,7 +858,7 @@ export default function CorrelationMatrixPage() {
                       <td className="px-2 py-1 text-right">
                         {p.wins}/{p.losses}
                       </td>
-                      <td className="px-2 py-1 text-right">{p.winRate.toFixed(1)}%</td>
+                      <td className="px-2 py-1 text-right">{(p.winRate * 100).toFixed(1)}%</td>
                       <td
                         className={cn(
                           "px-2 py-1 text-right font-semibold",
@@ -774,8 +875,7 @@ export default function CorrelationMatrixPage() {
           </div>
         </div>
       )}
-
-      {/* Quick Analysis */}
+{/* Quick Analysis */}
       {analytics && (
         <Card>
           <CardHeader>
