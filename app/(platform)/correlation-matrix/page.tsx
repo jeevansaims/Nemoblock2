@@ -26,6 +26,7 @@ import {
   CorrelationMethod,
   CorrelationMatrix,
   CorrelationNormalization,
+  PairStats,
 } from "@/lib/calculations/correlation";
 import { getBlock, getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
@@ -151,7 +152,7 @@ export default function CorrelationMatrixPage() {
       return { plotData: [], layout: {} };
     }
 
-    const { strategies, correlationData } = correlationMatrix;
+    const { strategies, correlationData, pairStats } = correlationMatrix;
     const isDark = theme === "dark";
 
     // Truncate strategy names for axis labels
@@ -211,11 +212,27 @@ export default function CorrelationMatrixPage() {
         ) as unknown as string,
       },
       // Use full strategy names in hover tooltip
-      hovertemplate:
-        "<b>%{customdata[0]} ↔ %{customdata[1]}</b><br>Correlation: %{z:.3f}<extra></extra>",
       customdata: correlationData.map((row, yIndex) =>
-        row.map((_, xIndex) => [strategies[yIndex], strategies[xIndex]])
+        row.map((_, xIndex) => {
+          const stats = pairStats?.[yIndex]?.[xIndex];
+          return [
+            strategies[yIndex],
+            strategies[xIndex],
+            stats?.triggered ?? 0,
+            stats?.wins ?? 0,
+            stats?.losses ?? 0,
+            stats?.winRate ?? 0,
+            stats?.netPL ?? 0,
+          ];
+        })
       ),
+      hovertemplate:
+        "<b>%{customdata[0]} ↔ %{customdata[1]}</b><br>" +
+        "Corr: %{z:.3f}<br>" +
+        "Triggers: %{customdata[2]:.0f}<br>" +
+        "Wins / Losses: %{customdata[3]:.0f} / %{customdata[4]:.0f}<br>" +
+        "Win%: %{customdata[5]:.1f}%<br>" +
+        "Net P/L: %{customdata[6]:,.0f}<extra></extra>",
       colorbar: {
         title: { text: "Correlation", side: "right" },
         tickmode: "linear",

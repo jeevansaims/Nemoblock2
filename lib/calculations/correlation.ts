@@ -16,6 +16,7 @@ export interface CorrelationOptions {
 export interface CorrelationMatrix {
   strategies: string[];
   correlationData: number[][];
+  pairStats: PairStats[][];
 }
 
 export interface CorrelationAnalytics {
@@ -29,6 +30,14 @@ export interface CorrelationAnalytics {
   };
   averageCorrelation: number;
   strategyCount: number;
+}
+
+export interface PairStats {
+  triggered: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  netPL: number;
 }
 
 /**
@@ -88,6 +97,7 @@ export function calculateCorrelationMatrix(
   }
 
   const correlationData: number[][] = [];
+  const pairStats: PairStats[][] = [];
 
   const sortedDates = alignment === "zero-pad"
     ? Array.from(allDates).sort()
@@ -104,10 +114,18 @@ export function calculateCorrelationMatrix(
 
   for (const strategy1 of strategies) {
     const row: number[] = [];
+    const statsRow: PairStats[] = [];
 
     for (const strategy2 of strategies) {
       if (strategy1 === strategy2) {
         row.push(1.0);
+        statsRow.push({
+          triggered: 0,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+          netPL: 0,
+        });
         continue;
       }
 
@@ -129,9 +147,29 @@ export function calculateCorrelationMatrix(
         }
       }
 
+      let triggered = 0;
+      let wins = 0;
+      let losses = 0;
+      let netPL = 0;
+
+      const len = Math.min(returns1.length, returns2.length);
+      for (let idx = 0; idx < len; idx++) {
+        const r1 = returns1[idx] ?? 0;
+        const r2 = returns2[idx] ?? 0;
+        if (r1 !== 0 && r2 !== 0) {
+          triggered += 1;
+          const combo = r1 + r2;
+          netPL += combo;
+          if (combo > 0) wins += 1;
+          else if (combo < 0) losses += 1;
+        }
+      }
+      const winRate = triggered > 0 ? (wins / triggered) * 100 : 0;
+
       // Need at least 2 data points for correlation
       if (returns1.length < 2 || returns2.length < 2) {
         row.push(0.0);
+        statsRow.push({ triggered, wins, losses, winRate, netPL });
         continue;
       }
 
@@ -146,12 +184,14 @@ export function calculateCorrelationMatrix(
       }
 
       row.push(correlation);
+      statsRow.push({ triggered, wins, losses, winRate, netPL });
     }
 
     correlationData.push(row);
+    pairStats.push(statsRow);
   }
 
-  return { strategies, correlationData };
+  return { strategies, correlationData, pairStats };
 }
 
 /**
