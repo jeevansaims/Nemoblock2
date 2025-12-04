@@ -53,6 +53,7 @@ const formatCompactUsd = (value: number) =>
 type ComboSize = 2 | 3 | 4;
 type ComboSortKey = "corr" | "triggers" | "winRate" | "netPL";
 type ComboSortDir = "asc" | "desc";
+type SizingMode = "actual" | "oneLot" | "kelly" | "halfKelly";
 
 export default function CorrelationMatrixPage() {
   const { theme } = useTheme();
@@ -71,19 +72,32 @@ export default function CorrelationMatrixPage() {
   const [comboSize, setComboSize] = useState<ComboSize>(2);
   const [comboSortKey, setComboSortKey] = useState<ComboSortKey>("netPL");
   const [comboSortDir, setComboSortDir] = useState<ComboSortDir>("desc");
+  const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
 
   const normalizeReturnLocal = (trade: Trade, mode: CorrelationNormalization) => {
+    const sizedPL = (() => {
+      const lots = Math.max(1, Math.abs(trade.numContracts ?? 1));
+      if (sizingMode === "oneLot") {
+        return trade.pl / lots;
+      }
+      if (sizingMode === "halfKelly") {
+        return trade.pl * 0.5;
+      }
+      // "actual" and "kelly" both use recorded P/L; Kelly scaling would be handled upstream if present.
+      return trade.pl;
+    })();
+
     switch (mode) {
       case "margin":
         if (!trade.marginReq) return null;
-        return trade.pl / trade.marginReq;
+        return sizedPL / trade.marginReq;
       case "notional": {
         const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
         if (!notional) return null;
-        return trade.pl / notional;
+        return sizedPL / notional;
       }
       default:
-        return trade.pl;
+        return sizedPL;
     }
   };
 
@@ -391,7 +405,7 @@ export default function CorrelationMatrixPage() {
     });
 
     return pairs;
-  }, [correlationMatrix, trades, dateBasis, normalization, comboSize, minTriggers, comboSortKey, comboSortDir]);
+  }, [correlationMatrix, trades, dateBasis, normalization, comboSize, minTriggers, comboSortKey, comboSortDir, sizingMode]);
 
   const handleComboSortClick = (key: ComboSortKey) => {
     setComboSortKey((prevKey) => {
@@ -521,6 +535,33 @@ export default function CorrelationMatrixPage() {
           <CardTitle className="text-lg">Calculation Settings</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-wrap items-center gap-3 pb-4">
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sizing</span>
+              <div className="inline-flex gap-1 rounded-lg border border-border/60 bg-background px-1 py-0.5">
+                {[
+                  { id: "actual", label: "Actual" },
+                  { id: "oneLot", label: "1-lot" },
+                  { id: "kelly", label: "Kelly" },
+                  { id: "halfKelly", label: "1/2 Kelly" },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={cn(
+                      "rounded-md px-2 py-0.5 text-[11px]",
+                      sizingMode === opt.id
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted/40"
+                    )}
+                    onClick={() => setSizingMode(opt.id as SizingMode)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {/* Method */}
             <div className="space-y-2">
