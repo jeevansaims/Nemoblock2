@@ -6,15 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
+import { computeAdvancedKelly } from "@/lib/kelly/computeAdvancedKelly";
 
-type StrategyRow = { name: string; portfolioShare: number };
+type StrategyRow = {
+  name: string;
+  avgFundsPerTrade: number; // Avg % Funds / Trade from realized allocation (baseline)
+  pf?: number;
+  rom?: number;
+  maxMarginUsed?: number;
+  clusterCorrelation?: number;
+};
 
 interface KellyScalingPlaygroundProps {
   strategies: StrategyRow[];
   baselineMaxDD: number;
 }
 
-const DEFAULT_SCALES = [0.8, 0.85, 0.9, 1];
+const DEFAULT_SCALES = [0.55, 0.8, 0.85, 0.9, 1];
 
 const fmtPct = (v: number) => `${v.toFixed(1)}%`;
 
@@ -22,6 +31,7 @@ export function KellyScalingPlayground({ strategies, baselineMaxDD }: KellyScali
   const [baselineDd, setBaselineDd] = useState<number>(baselineMaxDD || 0);
   const [selectedScales, setSelectedScales] = useState<number[]>(DEFAULT_SCALES);
   const [customScale, setCustomScale] = useState<string>("0.55");
+  const [useAdvancedKelly, setUseAdvancedKelly] = useState(false);
 
   const parsedCustom = useMemo(() => {
     const n = parseFloat(customScale);
@@ -34,13 +44,41 @@ export function KellyScalingPlayground({ strategies, baselineMaxDD }: KellyScali
     return Array.from(new Set(merged)).sort((a, b) => a - b);
   }, [parsedCustom, selectedScales]);
 
+  // Baseline weights sourced from realized Avg % Funds / Trade (spec requirement).
+  const baselineWeights = useMemo(() => {
+    return strategies.reduce<Record<string, number>>((acc, s) => {
+      acc[s.name] = s.avgFundsPerTrade ?? 0;
+      return acc;
+    }, {});
+  }, [strategies]);
+
+  // Advanced Kelly weights driven by PF/ROM/margin/correlation (normalized, sum to 100).
+  const advancedWeights = useMemo(
+    () =>
+      computeAdvancedKelly(
+        strategies.map((s) => ({
+          name: s.name,
+          pf: s.pf,
+          rom: s.rom,
+          maxMarginUsed: s.maxMarginUsed,
+          clusterCorrelation: s.clusterCorrelation,
+        }))
+      ),
+    [strategies]
+  );
+
+  const activeWeights = useMemo(
+    () => (useAdvancedKelly ? advancedWeights : baselineWeights),
+    [advancedWeights, baselineWeights, useAdvancedKelly]
+  );
+
   const rows = useMemo(() => {
     return strategies.map((s) => ({
       name: s.name,
-      baseline: s.portfolioShare,
-      scaled: scales.map((k) => ({ k, value: s.portfolioShare * k })),
+      baseline: activeWeights[s.name] ?? 0,
+      scaled: scales.map((k) => ({ k, value: (activeWeights[s.name] ?? 0) * k })),
     }));
-  }, [scales, strategies]);
+  }, [activeWeights, scales, strategies]);
 
   const kellyRows = useMemo(
     () =>
@@ -120,6 +158,10 @@ export function KellyScalingPlayground({ strategies, baselineMaxDD }: KellyScali
               placeholder="0.55"
               title="Add a custom Kelly scale"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Advanced Kelly (PF/ROM/Margin/Correlation)</span>
+            <Switch checked={useAdvancedKelly} onCheckedChange={setUseAdvancedKelly} />
           </div>
           <div className="text-xs text-muted-foreground">{recommendation}</div>
         </div>

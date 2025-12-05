@@ -46,13 +46,14 @@ type AllocationSort =
 type StrategyAllocationRow = {
   strategy: string;
   trades: number;
-  avgAlloc: number;
+  avgAlloc: number; // Avg % Funds / trade (baseline for Kelly)
   portfolioShare: number;
   peakDaily: number;
   netPL: number;
   rom: number;
   pf: number;
   maxCapitalUsed: number;
+  clusterCorrelation?: number;
 };
 type WithdrawalSimResult = ReturnType<typeof computeEquityAndWithdrawals>;
 
@@ -287,7 +288,11 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       <KellyScalingPlayground
         strategies={allocationRows.map((r) => ({
           name: r.strategy,
-          portfolioShare: r.portfolioShare,
+          avgFundsPerTrade: r.avgAlloc,
+          pf: r.pf,
+          rom: r.rom,
+          maxMarginUsed: r.maxCapitalUsed,
+          clusterCorrelation: r.clusterCorrelation,
         }))}
         baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
       />
