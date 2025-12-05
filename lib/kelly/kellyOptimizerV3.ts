@@ -56,6 +56,22 @@ export interface KellyV3Result {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
+function computeTierThresholds(scores: number[]) {
+  if (!scores.length) {
+    return { t1Min: 0.66, t2Min: 0.4 };
+  }
+  const sorted = [...scores].sort((a, b) => a - b);
+  const q60 = sorted[Math.floor(0.6 * (sorted.length - 1))];
+  const q30 = sorted[Math.floor(0.3 * (sorted.length - 1))];
+  return { t1Min: q60, t2Min: q30 };
+}
+
+function decideTier(score: number, thresholds: { t1Min: number; t2Min: number }): "T1" | "T2" | "T3" {
+  if (score >= thresholds.t1Min) return "T1";
+  if (score >= thresholds.t2Min) return "T2";
+  return "T3";
+}
+
 /**
  * Build an equity curve at a given Kelly scale and return max DD and CAGR.
  */
@@ -101,12 +117,6 @@ function normalize(values: number[]): (v: number | undefined) => number {
   };
 }
 
-function decideTier(score: number): "T1" | "T2" | "T3" {
-  if (score >= 0.66) return "T1";
-  if (score >= 0.4) return "T2";
-  return "T3";
-}
-
 function tierKelly(tier: "T1" | "T2" | "T3", mode: KellyMode): [number, number] {
   if (tier === "T1") {
     if (mode === "conservative") return [6, 8];
@@ -136,14 +146,26 @@ export function computeAdvancedKellyV3(inputs: KellyV3Inputs): KellyV3Result {
   const ddNorm = normalize(strategies.map((s) => s.maxDrawdownPct ?? 0));
   const marginNorm = normalize(strategies.map((s) => s.marginSpikePct ?? 0));
 
-  const strategyRecs: StrategyKellyRecommendation[] = strategies.map((s) => {
+  const riskScores = strategies.map((s) => {
     const pfScore = pfNorm(s.pf ?? 0);
     const romScore = romNorm(s.romPct ?? 0);
     const ddScore = 1 - ddNorm(s.maxDrawdownPct ?? 0);
     const marginScore = 1 - marginNorm(s.marginSpikePct ?? 0);
     const allocBoost = clamp((s.avgFundsPct ?? 0) / 10, 0, 0.2);
     const riskScore = clamp(0.25 * pfScore + 0.25 * romScore + 0.25 * ddScore + 0.25 * marginScore + allocBoost, 0, 1);
-    const tier = decideTier(riskScore);
+    return riskScore;
+  });
+
+  const thresholds = computeTierThresholds(riskScores);
+
+  const strategyRecs: StrategyKellyRecommendation[] = strategies.map((s, idx) => {
+    const pfScore = pfNorm(s.pf ?? 0);
+    const romScore = romNorm(s.romPct ?? 0);
+    const ddScore = 1 - ddNorm(s.maxDrawdownPct ?? 0);
+    const marginScore = 1 - marginNorm(s.marginSpikePct ?? 0);
+    const allocBoost = clamp((s.avgFundsPct ?? 0) / 10, 0, 0.2);
+    const riskScore = riskScores[idx];
+    const tier = decideTier(riskScore, thresholds);
 
     const [consLo, consHi] = tierKelly(tier, "conservative");
     const [balLo, balHi] = tierKelly(tier, "balanced");

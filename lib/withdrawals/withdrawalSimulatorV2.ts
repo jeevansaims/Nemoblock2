@@ -41,6 +41,16 @@ export interface WithdrawalSimResult {
  * - Re-sizes P/L by equity / startingCapital * targetKelly / baselineKelly.
  * - Withdraws monthlyPct of profits above high water at month boundaries.
  */
+function getTradeCapitalFraction(t: WithdrawalTrade, startingCapital: number): number {
+  const notional =
+    t.fundsAtClose ??
+    t.marginReq ??
+    Math.abs(t.premium ?? 0) * 100 * Math.max(1, t.numContracts ?? 1);
+
+  if (!notional || !startingCapital) return 0;
+  return notional / startingCapital;
+}
+
 export function runWithdrawalSimulationV2(inputs: WithdrawalSimInputs): WithdrawalSimResult {
   const { trades, startingCapital, baselineKellyScale, targetKellyScale, rule } = inputs;
 
@@ -69,9 +79,14 @@ export function runWithdrawalSimulationV2(inputs: WithdrawalSimInputs): Withdraw
     }
     currentMonth = monthKey;
 
+    const fraction = getTradeCapitalFraction(t, startingCapital);
+
     // Dynamic sizing factor relative to original Kelly sizing.
     const capitalScale = (equity / startingCapital) * (targetKellyScale / baselineKellyScale);
-    const boundedScale = Math.max(0, Math.min(capitalScale, 2)); // clamp extremes
+    const capitalDeployed = equity * fraction * (targetKellyScale / baselineKellyScale);
+    const baselineDeployed = startingCapital * fraction;
+    const sizingFactor = baselineDeployed > 0 ? capitalDeployed / baselineDeployed : capitalScale;
+    const boundedScale = Math.max(0, Math.min(sizingFactor, 2)); // clamp extremes
     const scaledPnl = t.pnl * boundedScale;
 
     equity += scaledPnl;
