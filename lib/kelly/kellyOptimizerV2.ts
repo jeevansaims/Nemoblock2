@@ -41,7 +41,7 @@ export function buildEquityCurve(
  * Compute DD / equity curves for multiple Kelly scales.
  */
 export function computeKellyScaleResults(params: {
-  dailyPnl: DailyPnlPoint[];
+  dailyPnl: DailyPnLPoint[];
   startingCapital: number;
   baselinePortfolioKellyPct: number;
   kellyScales: number[];
