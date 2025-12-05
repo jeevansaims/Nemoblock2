@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
 import {
   AvgPLStats,
   RawTrade,
@@ -50,6 +51,9 @@ type StrategyAllocationRow = {
   netPL: number;
   rom: number;
 };
+type WithdrawalSimResult = ReturnType<typeof computeEquityAndWithdrawals>;
+
+
 
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
@@ -59,7 +63,6 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [onlyIfProfitable, setOnlyIfProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
-  const [withdrawalRate, setWithdrawalRate] = useState(50);
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
@@ -260,6 +263,15 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           </div>
         </CardContent>
       </Card>
+
+      <KellyScalingPlayground
+        strategies={allocationRows.map((r) => ({
+          name: r.strategy,
+          portfolioShare: r.portfolioShare,
+        }))}
+        baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
+      />
+
 
       <Card>
         <CardHeader>
