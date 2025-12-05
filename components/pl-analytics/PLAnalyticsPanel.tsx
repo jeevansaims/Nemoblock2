@@ -59,6 +59,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [onlyIfProfitable, setOnlyIfProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
+  const [withdrawalRate, setWithdrawalRate] = useState(50);
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
@@ -400,7 +401,7 @@ function MonthlyTable({ sim }: { sim: ReturnType<typeof computeEquityAndWithdraw
   );
 }
 
-function EquitySummary({ sim }: { sim: ReturnType<typeof computeEquityAndWithdrawals> }) {
+function EquitySummary({ sim }: { sim: WithdrawalSimResult }) {
   const items = [
     { label: "Ending Capital", value: sim.endingCapital },
     { label: "Total P/L", value: sim.totalPL },
