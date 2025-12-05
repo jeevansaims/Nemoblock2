@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
-import { KellyOptimizer, KellyOptimizerRow } from "@/components/pl-analytics/KellyOptimizer";
+import { KellyOptimizer } from "@/components/pl-analytics/KellyOptimizer";
 import {
   AvgPLStats,
   RawTrade,
@@ -19,6 +19,7 @@ import {
   normalizeTradesToOneLot,
   WithdrawalMode,
 } from "@/lib/analytics/pl-analytics";
+import { computeKellyScaleResults, KellyScaleResult } from "@/lib/kelly/kellyOptimizerV2";
 import { cn } from "@/lib/utils";
 
 interface PLAnalyticsPanelProps {
@@ -74,6 +75,19 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
   const daily = useMemo(() => buildDailyPnL(normalizedTrades), [normalizedTrades]);
   const avgStats = useMemo(() => computeAvgPLStats(daily), [daily]);
+  const kellyScaleResults: KellyScaleResult[] = useMemo(() => {
+    if (daily.length === 0) return [];
+    return computeKellyScaleResults({
+      dailyPnl: daily,
+      startingCapital: startingBalance,
+      baselinePortfolioKellyPct: 100,
+      kellyScales: [0.55, 0.8, 0.85, 0.9, 1],
+    });
+  }, [daily, startingBalance]);
+  const baselineKellyResult = useMemo(
+    () => kellyScaleResults.find((r) => Math.abs(r.scale - 1) < 1e-6),
+    [kellyScaleResults]
+  );
 
   const sim = useMemo(
     () =>
@@ -294,7 +308,8 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           maxMarginUsed: r.maxCapitalUsed,
           clusterCorrelation: r.clusterCorrelation,
         }))}
-        baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
+        baselineMaxDD={baselineKellyResult?.estMaxDdPct ?? Math.abs(sim.maxDrawdownPct) * 100}
+        kellyResults={kellyScaleResults}
       />
 
       <KellyOptimizer

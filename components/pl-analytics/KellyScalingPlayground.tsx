@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { computeAdvancedKelly } from "@/lib/kelly/computeAdvancedKelly";
+import type { KellyScaleResult } from "@/lib/kelly/kellyOptimizerV2";
 
 type StrategyRow = {
   name: string;
@@ -21,13 +22,15 @@ type StrategyRow = {
 interface KellyScalingPlaygroundProps {
   strategies: StrategyRow[];
   baselineMaxDD: number;
+  kellyResults?: KellyScaleResult[]; // optional precomputed equity/DD per scale
 }
 
 const DEFAULT_SCALES = [0.55, 0.8, 0.85, 0.9, 1];
 
 const fmtPct = (v: number) => `${v.toFixed(1)}%`;
 
-export function KellyScalingPlayground({ strategies, baselineMaxDD }: KellyScalingPlaygroundProps) {
+export function KellyScalingPlayground({ strategies, baselineMaxDD, kellyResults }: KellyScalingPlaygroundProps) {
+  // baselineDd is still user-editable; seeded from real equity DD
   const [baselineDd, setBaselineDd] = useState<number>(baselineMaxDD || 0);
   const [selectedScales, setSelectedScales] = useState<number[]>(DEFAULT_SCALES);
   const [customScale, setCustomScale] = useState<string>("0.55");
@@ -80,28 +83,42 @@ export function KellyScalingPlayground({ strategies, baselineMaxDD }: KellyScali
     }));
   }, [activeWeights, scales, strategies]);
 
-  const kellyRows = useMemo(
-    () =>
-      scales.map((k) => ({
-        k,
-        portfolioKellyPct: k * 100,
-        estMaxDD: baselineDd * k,
-      })),
-    [baselineDd, scales]
-  );
+  // Use provided Kelly/DD results when available; otherwise fall back to scaled-baseline approximation.
+  const kellyRows = useMemo(() => {
+    if (kellyResults && kellyResults.length > 0) {
+      // Filter to active scales so the table matches the toggle set.
+      const allowed = new Set(scales.map((s) => Number(s.toFixed(4))));
+      return kellyResults
+        .filter((r) => allowed.has(Number(r.scale.toFixed(4))))
+        .map((r) => ({
+          k: r.scale,
+          portfolioKellyPct: r.portfolioKellyPct,
+          estMaxDD: r.estMaxDdPct,
+        }));
+    }
+    // Fallback: linear DD scaling from user-entered baseline.
+    return scales.map((k) => ({
+      k,
+      portfolioKellyPct: k * 100,
+      estMaxDD: baselineDd * k,
+    }));
+  }, [baselineDd, kellyResults, scales]);
 
   const recommendation = useMemo(() => {
+    const ddLookup = (k: number) =>
+      kellyRows.find((r) => Math.abs(r.k - k) < 1e-6)?.estMaxDD ?? baselineDd * k;
+
     const hasSweetSpot = scales.some((k) => k >= 0.55 && k <= 0.6);
     if (hasSweetSpot) {
       return `Target Kelly ≈ 0.55–0.60× (Portfolio Kelly 55–60%), expected Max DD ≈ ${fmtPct(
-        baselineDd * 0.55
-      )} – ${fmtPct(baselineDd * 0.6)}.`;
+        ddLookup(0.55)
+      )} – ${fmtPct(ddLookup(0.6))}.`;
     }
     const smallest = Math.min(...scales);
     return `Safest option: ${smallest.toFixed(2)}× (Portfolio Kelly ${fmtPct(
       smallest * 100
-    )}), estimated Max DD ≈ ${fmtPct(baselineDd * smallest)}.`;
-  }, [baselineDd, scales]);
+    )}), estimated Max DD ≈ ${fmtPct(ddLookup(smallest))}.`;
+  }, [baselineDd, kellyRows, scales]);
 
   const toggleScale = (k: number) => {
     setSelectedScales((prev) =>
