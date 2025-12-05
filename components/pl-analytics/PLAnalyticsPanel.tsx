@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
+import { KellyOptimizer, KellyOptimizerRow } from "@/components/pl-analytics/KellyOptimizer";
 import {
   AvgPLStats,
   RawTrade,
@@ -50,6 +51,8 @@ type StrategyAllocationRow = {
   peakDaily: number;
   netPL: number;
   rom: number;
+  pf: number;
+  maxCapitalUsed: number;
 };
 type WithdrawalSimResult = ReturnType<typeof computeEquityAndWithdrawals>;
 
@@ -92,8 +95,11 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       trades: number;
       totalCapital: number;
       totalPL: number;
+      winPL: number;
+      lossPL: number;
       allocations: number[]; // per-trade allocation %
       dailyCapital: Map<string, { capital: number; funds: number }>;
+      maxCapitalUsed: number;
     };
 
     const byStrategy = new Map<string, StratAgg>();
@@ -115,8 +121,11 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           trades: 0,
           totalCapital: 0,
           totalPL: 0,
+          winPL: 0,
+          lossPL: 0,
           allocations: [],
           dailyCapital: new Map(),
+          maxCapitalUsed: 0,
         });
       }
       const agg = byStrategy.get(strategy)!;
@@ -124,6 +133,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       agg.totalCapital += capitalUsed;
       agg.totalPL += t.pl;
       agg.allocations.push(allocPct);
+      agg.maxCapitalUsed = Math.max(agg.maxCapitalUsed, capitalUsed);
+      if (t.pl > 0) agg.winPL += t.pl;
+      else if (t.pl < 0) agg.lossPL += Math.abs(t.pl);
 
       const key = dateKey(t.openedOn);
       const existing = agg.dailyCapital.get(key) ?? { capital: 0, funds: 0 };
@@ -152,6 +164,12 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       const portfolioShare =
         totalCapitalAll > 0 ? (s.totalCapital / totalCapitalAll) * 100 : 0;
       const rom = s.totalCapital > 0 ? (s.totalPL / s.totalCapital) * 100 : 0;
+      const pf =
+        s.lossPL > 0
+          ? s.winPL / s.lossPL
+          : s.winPL > 0
+          ? Number.POSITIVE_INFINITY
+          : 0;
 
       return {
         strategy: s.strategy,
@@ -161,6 +179,8 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
         peakDaily,
         netPL: s.totalPL,
         rom,
+        pf,
+        maxCapitalUsed: s.maxCapitalUsed,
       };
     });
 
@@ -268,6 +288,17 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
         strategies={allocationRows.map((r) => ({
           name: r.strategy,
           portfolioShare: r.portfolioShare,
+        }))}
+        baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
+      />
+
+      <KellyOptimizer
+        strategies={allocationRows.map((r) => ({
+          strategy: r.strategy,
+          portfolioShare: r.portfolioShare,
+          pf: r.pf,
+          rom: r.rom,
+          maxCapitalUsed: r.maxCapitalUsed,
         }))}
         baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
       />
