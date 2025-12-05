@@ -1,6 +1,6 @@
 export interface DailyPnLPoint {
   date: string; // "2023-05-01"
-  pnl: number;  // portfolio P/L for that day (backtest basis)
+  pl: number;  // portfolio P/L for that day (backtest basis)
 }
 
 export interface KellyV3StrategyInput {
@@ -48,7 +48,7 @@ function computeEquityCurve(dailyPnl: DailyPnLPoint[], startingCapital: number, 
   const equity: number[] = [];
   let current = startingCapital;
   for (const p of dailyPnl) {
-    current += p.pnl * scale;
+    current += p.pl * scale;
     equity.push(current);
   }
   return equity;

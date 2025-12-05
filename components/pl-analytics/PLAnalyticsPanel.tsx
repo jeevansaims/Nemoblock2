@@ -59,7 +59,7 @@ type StrategyAllocationRow = {
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
   const [withdrawPercent, setWithdrawPercent] = useState(30);
-  const [normalizeOneLot, setNormalizeOneLot] = useState(false);
+  const [normalizeOneLot, _setNormalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
