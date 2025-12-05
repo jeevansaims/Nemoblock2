@@ -61,7 +61,7 @@ export default function PlAnalyticsPage() {
         premium: t.premium,
         marginReq: t.marginReq,
         contracts: t.numContracts,
-        fundsAtClose: t.fundsAtClose ?? t.funds ?? undefined,
+        fundsAtClose: t.fundsAtClose ?? undefined,
       })),
     [trades]
   );
