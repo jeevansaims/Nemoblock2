@@ -7,6 +7,7 @@ export interface RawTrade {
   openedOn: Date;
   closedOn: Date;
   pl: number;
+  strategy?: string;
   premium?: number;
   marginReq?: number;
   contracts?: number;
@@ -77,6 +78,7 @@ export function normalizeTradesToOneLot(trades: RawTrade[]): RawTrade[] {
     if (contracts <= 0) return { ...t };
     return {
       ...t,
+      strategy: t.strategy,
       pl: t.pl / contracts,
       premium: t.premium !== undefined ? t.premium / contracts : undefined,
       marginReq: t.marginReq !== undefined ? t.marginReq / contracts : undefined,

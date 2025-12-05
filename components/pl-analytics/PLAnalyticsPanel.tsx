@@ -40,6 +40,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawFixed, setWithdrawFixed] = useState(1_000);
   const [onlyIfProfitable, setOnlyIfProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
+  const [allocationSort, setAllocationSort] = useState<
+    "portfolioShare" | "netPL" | "rom" | "peakAlloc" | "avgAlloc"
+  >("portfolioShare");
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
@@ -61,6 +64,93 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     [normalizedTrades, startingBalance, withdrawMode, withdrawPercent, withdrawFixed, onlyIfProfitable, normalizeOneLot]
   );
 
+  const allocationRows = useMemo(() => {
+    if (normalizedTrades.length === 0) return [];
+    const funds = startingBalance > 0 ? startingBalance : 0;
+
+    type StratAgg = {
+      strategy: string;
+      trades: number;
+      totalCapital: number;
+      totalPL: number;
+      allocations: number[]; // per-trade allocation %
+      dailyCapital: Map<string, number>;
+    };
+
+    const byStrategy = new Map<string, StratAgg>();
+    const dateKey = (d: Date) => d.toISOString().split("T")[0];
+
+    normalizedTrades.forEach((t) => {
+      const strategy = t.strategy || "Uncategorized";
+      const lots = Math.max(1, Math.abs(t.contracts ?? 1));
+      const capitalUsed =
+        t.marginReq && t.marginReq > 0
+          ? t.marginReq
+          : Math.abs(t.premium ?? 0) * 100 * lots;
+      const allocPct = funds > 0 ? (capitalUsed / funds) * 100 : 0;
+
+      if (!byStrategy.has(strategy)) {
+        byStrategy.set(strategy, {
+          strategy,
+          trades: 0,
+          totalCapital: 0,
+          totalPL: 0,
+          allocations: [],
+          dailyCapital: new Map(),
+        });
+      }
+      const agg = byStrategy.get(strategy)!;
+      agg.trades += 1;
+      agg.totalCapital += capitalUsed;
+      agg.totalPL += t.pl;
+      agg.allocations.push(allocPct);
+
+      const key = dateKey(t.openedOn);
+      agg.dailyCapital.set(key, (agg.dailyCapital.get(key) ?? 0) + capitalUsed);
+    });
+
+    const totalCapitalAll = Array.from(byStrategy.values()).reduce(
+      (sum, s) => sum + s.totalCapital,
+      0
+    );
+
+    const rows = Array.from(byStrategy.values()).map((s) => {
+      const avgAlloc =
+        s.allocations.length > 0
+          ? s.allocations.reduce((a, b) => a + b, 0) / s.allocations.length
+          : 0;
+      const peakDaily = Math.max(
+        0,
+        ...Array.from(s.dailyCapital.values()).map((c) =>
+          funds > 0 ? (c / funds) * 100 : 0
+        )
+      );
+      const portfolioShare =
+        totalCapitalAll > 0 ? (s.totalCapital / totalCapitalAll) * 100 : 0;
+      const rom = s.totalCapital > 0 ? (s.totalPL / s.totalCapital) * 100 : 0;
+
+      return {
+        strategy: s.strategy,
+        trades: s.trades,
+        avgAlloc,
+        portfolioShare,
+        peakDaily,
+        netPL: s.totalPL,
+        rom,
+      };
+    });
+
+    const sorter: Record<typeof allocationSort, (a: any, b: any) => number> = {
+      portfolioShare: (a, b) => b.portfolioShare - a.portfolioShare,
+      netPL: (a, b) => b.netPL - a.netPL,
+      rom: (a, b) => b.rom - a.rom,
+      peakAlloc: (a, b) => b.peakDaily - a.peakDaily,
+      avgAlloc: (a, b) => b.avgAlloc - a.avgAlloc,
+    };
+
+    return rows.sort(sorter[allocationSort]);
+  }, [normalizedTrades, startingBalance, allocationSort]);
+
   if (trades.length === 0) {
     return (
       <Card>
@@ -72,6 +162,87 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   return (
     <div className="space-y-6">
       <StatsGrid stats={avgStats} />
+
+      <Card>
+        <CardHeader className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <CardTitle>Realized Strategy Allocation</CardTitle>
+            <button
+              type="button"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground hover:bg-muted/60"
+              title="Estimates how much of your Trading Funds each strategy actually deployed, using margin when available or premium × contracts. Net P/L respects the current sizing toggle (1-lot switch)."
+            >
+              ?
+            </button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Based on capital used per trade vs. starting balance. Avg % is per-trade, portfolio share is total capital used by the strategy vs all trades.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
+              <span className="font-semibold">Sizing</span>
+              <span>{normalizeOneLot ? "1-lot normalized" : "Actual P/L"}</span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
+              <span className="font-semibold">Trading Funds</span>
+              <span>{fmtUsd(startingBalance)}</span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
+              <span className="font-semibold">Sort</span>
+              <select
+                className="bg-transparent text-xs"
+                value={allocationSort}
+                onChange={(e) =>
+                  setAllocationSort(e.target.value as typeof allocationSort)
+                }
+              >
+                <option value="portfolioShare">Portfolio share</option>
+                <option value="netPL">Net P/L</option>
+                <option value="rom">ROM%</option>
+                <option value="peakAlloc">Peak daily allocation</option>
+                <option value="avgAlloc">Avg % per trade</option>
+              </select>
+            </div>
+            <div className="ml-auto">
+              Showing {allocationRows.length} strategies
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[820px] rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="text-muted-foreground">
+                    <TableHead>Strategy</TableHead>
+                    <TableHead className="text-right">Trades</TableHead>
+                    <TableHead className="text-right">Avg % Funds / trade</TableHead>
+                    <TableHead className="text-right">Portfolio share</TableHead>
+                    <TableHead className="text-right">Peak daily alloc</TableHead>
+                    <TableHead className="text-right">Net P/L</TableHead>
+                    <TableHead className="text-right">ROM%</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allocationRows.map((row) => (
+                    <TableRow key={row.strategy}>
+                      <TableCell className="font-medium">{row.strategy}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{row.trades}</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{row.avgAlloc.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{row.portfolioShare.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs">{row.peakDaily.toFixed(1)}%</TableCell>
+                      <TableCell className={cn("text-right font-mono text-xs", row.netPL >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                        {fmtUsd(row.netPL)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">{row.rom.toFixed(1)}%</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

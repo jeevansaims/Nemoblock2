@@ -54,6 +54,7 @@ export default function PlAnalyticsPage() {
     () =>
       trades.map((t, idx) => ({
         id: t.timeOpened ? `${t.dateOpened}-${t.timeOpened}` : String(idx),
+        strategy: t.strategy || "Uncategorized",
         openedOn: new Date(t.dateOpened),
         closedOn: t.dateClosed ? new Date(t.dateClosed) : new Date(t.dateOpened),
         pl: t.pl || 0,
