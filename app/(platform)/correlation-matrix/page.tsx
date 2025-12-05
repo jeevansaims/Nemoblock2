@@ -841,11 +841,21 @@ export default function CorrelationMatrixPage() {
       {(comboPairs.length > 0 || comboStats.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Multi-Correlation Combos</CardTitle>
+            <CardTitle className="text-lg">Multi-Correlation</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {comboPairs.length > 0 && (
               <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold">Multi-Correlation Combos</h3>
+                  <button
+                    type="button"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground hover:bg-muted/60"
+                    title="Each row is a strategy combo. A trigger is a day when all members traded together; Net P/L uses the current sizing mode."
+                  >
+                    ?
+                  </button>
+                </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Min combo triggers</span>
