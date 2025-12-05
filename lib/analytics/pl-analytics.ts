@@ -11,6 +11,7 @@ export interface RawTrade {
   premium?: number;
   marginReq?: number;
   contracts?: number;
+  fundsAtClose?: number;
 }
 
 export interface DailyPnLPoint {
@@ -82,6 +83,7 @@ export function normalizeTradesToOneLot(trades: RawTrade[]): RawTrade[] {
       pl: t.pl / contracts,
       premium: t.premium !== undefined ? t.premium / contracts : undefined,
       marginReq: t.marginReq !== undefined ? t.marginReq / contracts : undefined,
+      fundsAtClose: t.fundsAtClose,
     };
   });
 }

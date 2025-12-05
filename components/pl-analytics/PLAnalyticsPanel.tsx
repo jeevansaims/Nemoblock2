@@ -66,7 +66,6 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
   const allocationRows = useMemo(() => {
     if (normalizedTrades.length === 0) return [];
-    const funds = startingBalance > 0 ? startingBalance : 0;
 
     type StratAgg = {
       strategy: string;
@@ -74,7 +73,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       totalCapital: number;
       totalPL: number;
       allocations: number[]; // per-trade allocation %
-      dailyCapital: Map<string, number>;
+      dailyCapital: Map<string, { capital: number; funds: number }>;
     };
 
     const byStrategy = new Map<string, StratAgg>();
@@ -82,12 +81,13 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
     normalizedTrades.forEach((t) => {
       const strategy = t.strategy || "Uncategorized";
-      const lots = Math.max(1, Math.abs(t.contracts ?? 1));
       const capitalUsed =
         t.marginReq && t.marginReq > 0
           ? t.marginReq
-          : Math.abs(t.premium ?? 0) * 100 * lots;
-      const allocPct = funds > 0 ? (capitalUsed / funds) * 100 : 0;
+          : Math.abs(t.premium ?? 0) * 100;
+      const fundsBaseline = t.fundsAtClose ?? 0;
+      const allocPct =
+        fundsBaseline > 0 ? (capitalUsed / fundsBaseline) * 100 : 0;
 
       if (!byStrategy.has(strategy)) {
         byStrategy.set(strategy, {
@@ -106,7 +106,11 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       agg.allocations.push(allocPct);
 
       const key = dateKey(t.openedOn);
-      agg.dailyCapital.set(key, (agg.dailyCapital.get(key) ?? 0) + capitalUsed);
+      const existing = agg.dailyCapital.get(key) ?? { capital: 0, funds: 0 };
+      agg.dailyCapital.set(key, {
+        capital: existing.capital + capitalUsed,
+        funds: Math.max(existing.funds, fundsBaseline),
+      });
     });
 
     const totalCapitalAll = Array.from(byStrategy.values()).reduce(
@@ -121,8 +125,8 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           : 0;
       const peakDaily = Math.max(
         0,
-        ...Array.from(s.dailyCapital.values()).map((c) =>
-          funds > 0 ? (c / funds) * 100 : 0
+        ...Array.from(s.dailyCapital.values()).map((d) =>
+          d.funds > 0 ? (d.capital / d.funds) * 100 : 0
         )
       );
       const portfolioShare =
@@ -149,7 +153,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     };
 
     return rows.sort(sorter[allocationSort]);
-  }, [normalizedTrades, startingBalance, allocationSort]);
+  }, [normalizedTrades, allocationSort]);
 
   if (trades.length === 0) {
     return (
@@ -170,13 +174,13 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             <button
               type="button"
               className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground hover:bg-muted/60"
-              title="Estimates how much of your Trading Funds each strategy actually deployed, using margin when available or premium × contracts. Net P/L respects the current sizing toggle (1-lot switch)."
+              title="Estimates how much capital each strategy actually deployed, using margin (or premium) divided by Funds at Close. Net P/L respects the current sizing toggle (1-lot switch)."
             >
               ?
             </button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Based on capital used per trade vs. starting balance. Avg % is per-trade, portfolio share is total capital used by the strategy vs all trades.
+            Based on capital used per trade vs. Funds at Close. Avg % is per trade, portfolio share is total capital used by the strategy vs all trades.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -184,10 +188,6 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
               <span className="font-semibold">Sizing</span>
               <span>{normalizeOneLot ? "1-lot normalized" : "Actual P/L"}</span>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
-              <span className="font-semibold">Trading Funds</span>
-              <span>{fmtUsd(startingBalance)}</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1">
               <span className="font-semibold">Sort</span>
