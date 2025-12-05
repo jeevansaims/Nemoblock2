@@ -40,9 +40,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawFixed, setWithdrawFixed] = useState(1_000);
   const [onlyIfProfitable, setOnlyIfProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
-  const [allocationSort, setAllocationSort] = useState<
-    "portfolioShare" | "netPL" | "rom" | "peakAlloc" | "avgAlloc"
-  >("portfolioShare");
+  const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
@@ -118,7 +116,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       0
     );
 
-    const rows = Array.from(byStrategy.values()).map((s) => {
+    const rows: StrategyAllocationRow[] = Array.from(byStrategy.values()).map((s) => {
       const avgAlloc =
         s.allocations.length > 0
           ? s.allocations.reduce((a, b) => a + b, 0) / s.allocations.length
@@ -144,7 +142,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       };
     });
 
-    const sorter: Record<typeof allocationSort, (a: any, b: any) => number> = {
+    const sorter: Record<AllocationSort, (a: StrategyAllocationRow, b: StrategyAllocationRow) => number> = {
       portfolioShare: (a, b) => b.portfolioShare - a.portfolioShare,
       netPL: (a, b) => b.netPL - a.netPL,
       rom: (a, b) => b.rom - a.rom,

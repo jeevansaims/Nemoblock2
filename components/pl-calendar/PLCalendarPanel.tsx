@@ -794,37 +794,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     }
   };
 
-  const romTrend = useMemo(() => {
-    if (heatmapMetric !== "rom") return null;
-    const days: { date: string; pl: number; margin: number }[] = [];
-    dailyStats.forEach((stat, key) => {
-      if (format(stat.date, "yyyy") === format(currentDate, "yyyy")) {
-        days.push({
-          date: key,
-          pl: stat.netPL,
-          margin: stat.marginUsed ?? 0,
-        });
-      }
-    });
-    const sorted = days.sort((a, b) => a.date.localeCompare(b.date));
-    const computeRolling = (window: number) => {
-      const res: { date: string; romPct: number }[] = [];
-      for (let i = 0; i < sorted.length; i++) {
-        if (i + 1 < window) continue;
-        const slice = sorted.slice(i + 1 - window, i + 1);
-        const sumPl = slice.reduce((s, d) => s + d.pl, 0);
-        const sumMargin = slice.reduce((s, d) => s + Math.max(0, d.margin), 0);
-        const rom = sumMargin > 0 ? (sumPl / sumMargin) * 100 : 0;
-        res.push({ date: sorted[i].date, romPct: rom });
-      }
-      return res;
-    };
-    return {
-      rolling7: computeRolling(7),
-      rolling14: computeRolling(14),
-    };
-  }, [dailyStats, currentDate, heatmapMetric]);
-
   const years = useMemo(() => {
     const yearsSet = new Set<number>();
     trades.forEach((t) => {

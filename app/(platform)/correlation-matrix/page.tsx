@@ -405,7 +405,18 @@ export default function CorrelationMatrixPage() {
     });
 
     return pairs;
-  }, [correlationMatrix, trades, dateBasis, normalization, comboSize, minTriggers, comboSortKey, comboSortDir, sizingMode]);
+  }, [
+    correlationMatrix,
+    trades,
+    dateBasis,
+    normalization,
+    comboSize,
+    minTriggers,
+    comboSortKey,
+    comboSortDir,
+    sizingMode,
+    normalizeReturnLocal,
+  ]);
 
   const handleComboSortClick = (key: ComboSortKey) => {
     setComboSortKey((prevKey) => {
