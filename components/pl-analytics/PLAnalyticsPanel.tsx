@@ -59,7 +59,7 @@ type StrategyAllocationRow = {
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
   const [withdrawPercent, setWithdrawPercent] = useState(30);
-  const [normalizeOneLot, _setNormalizeOneLot] = useState(false);
+  const [normalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
@@ -92,51 +92,6 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const baselineKellyResult = useMemo(
     () => kellyScaleResults.find((r) => Math.abs(r.scale - 1) < 1e-6),
     [kellyScaleResults]
-  );
-
-  const kellyV3Result = useMemo(() => {
-    if (daily.length === 0 || allocationRows.length === 0) return null;
-    return computeAdvancedKellyV3({
-      dailyPnl: daily,
-      startingCapital: startingBalance,
-      targetMaxDdPct,
-      strategies: allocationRows.map((r) => ({
-        name: r.strategy,
-        pf: r.pf,
-        romPct: r.rom,
-        avgFundsPctPerTrade: r.avgAlloc,
-        marginSpikeFactor: r.maxCapitalUsed > 0 ? Math.min(1, r.maxCapitalUsed / startingBalance) : 0,
-        tier: 2,
-      })),
-      lockRealizedWeights,
-    });
-  }, [allocationRows, daily, lockRealizedWeights, startingBalance, targetMaxDdPct]);
-
-  const handleExportKellyCsv = () => {
-    if (!kellyV3Result) return;
-    const header = "Strategy,KellyPct\n";
-    const body = kellyV3Result.rows.map((row) => `${row.name},${row.finalKellyPct.toFixed(2)}`).join("\n");
-    const csv = header + body;
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "kelly-optimizer-v3.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const withdrawalSim = useMemo(
-    () =>
-      runWithdrawalSimulationV2({
-        backtestCapital: startingBalance,
-        startingCapital: startingBalance,
-        monthlyPnl: monthlyPnlPoints,
-        mode: "percent",
-        withdrawalPercent: withdrawPercent / 100,
-        withdrawOnlyOnProfits: true,
-      }),
-    [monthlyPnlPoints, startingBalance, withdrawPercent]
   );
 
   const allocationRows = useMemo(() => {
@@ -244,8 +199,53 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       avgAlloc: (a, b) => b.avgAlloc - a.avgAlloc,
     };
 
-    return rows.sort(sorter[allocationSort]);
+      return rows.sort(sorter[allocationSort]);
   }, [normalizedTrades, allocationSort]);
+
+  const kellyV3Result = useMemo(() => {
+    if (daily.length === 0 || allocationRows.length === 0) return null;
+    return computeAdvancedKellyV3({
+      dailyPnl: daily,
+      startingCapital: startingBalance,
+      targetMaxDdPct,
+      strategies: allocationRows.map((r) => ({
+        name: r.strategy,
+        pf: r.pf,
+        romPct: r.rom,
+        avgFundsPctPerTrade: r.avgAlloc,
+        marginSpikeFactor: r.maxCapitalUsed > 0 ? Math.min(1, r.maxCapitalUsed / startingBalance) : 0,
+        tier: 2,
+      })),
+      lockRealizedWeights,
+    });
+  }, [allocationRows, daily, lockRealizedWeights, startingBalance, targetMaxDdPct]);
+
+  const handleExportKellyCsv = () => {
+    if (!kellyV3Result) return;
+    const header = "Strategy,KellyPct\n";
+    const body = kellyV3Result.rows.map((row) => `${row.name},${row.finalKellyPct.toFixed(2)}`).join("\n");
+    const csv = header + body;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "kelly-optimizer-v3.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const withdrawalSim = useMemo(
+    () =>
+      runWithdrawalSimulationV2({
+        backtestCapital: startingBalance,
+        startingCapital: startingBalance,
+        monthlyPnl: monthlyPnlPoints,
+        mode: "percent",
+        withdrawalPercent: withdrawPercent / 100,
+        withdrawOnlyOnProfits: true,
+      }),
+    [monthlyPnlPoints, startingBalance, withdrawPercent]
+  );
 
   if (trades.length === 0) {
     return (
