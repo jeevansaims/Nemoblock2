@@ -769,152 +769,6 @@ export default function CorrelationMatrixPage() {
         </div>
       </div>
 
-      {comboPairs.length > 0 && (
-        <div className="mt-6 space-y-3">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Min combo triggers</span>
-              <input
-                type="number"
-                min={1}
-                className="w-20 rounded-md border bg-background px-2 py-1 text-xs"
-                value={minTriggers}
-                onChange={(e) => {
-                  const raw = Number(e.target.value || 0);
-                  setMinTriggers(raw > 0 ? raw : 1);
-                }}
-              />
-              <button
-                type="button"
-                className="flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] text-muted-foreground hover:bg-muted/40"
-                title="Combos = days when both strategies have trades. Filters and stats below use only those overlapping days."
-              >
-                ?
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Combo size</span>
-              <select
-                className="rounded-md border bg-background px-2 py-1 text-xs"
-                value={comboSize}
-                onChange={(e) => setComboSize(Number(e.target.value) as ComboSize)}
-              >
-                <option value={2}>2-way</option>
-                <option value={3}>3-way</option>
-                <option value={4}>4-way</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Sizing</span>
-              <div className="inline-flex gap-1 rounded-lg border border-border/60 bg-background px-1 py-0.5">
-                {[
-                  { id: "actual", label: "Actual" },
-                  { id: "oneLot", label: "1-lot" },
-                  { id: "kelly", label: "Kelly" },
-                  { id: "halfKelly", label: "1/2 Kelly" },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    className={cn(
-                      "rounded-md px-2 py-0.5 text-[11px]",
-                      sizingMode === opt.id
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted/40"
-                    )}
-                    onClick={() => setSizingMode(opt.id as SizingMode)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-              Showing <span className="font-semibold">{comboPairs.length}</span> combos matching filters
-            </div>
-          </div>
-
-          <div className="rounded-xl border bg-muted/40 p-3">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Combo stats (co-trading days)
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
-                  <tr>
-                    <th className="py-1 pr-2 text-left">Combo (size {comboSize})</th>
-                    <th
-                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
-                      onClick={() => handleComboSortClick("corr")}
-                    >
-                      Corr
-                      {comboSortKey === "corr" && (comboSortDir === "asc" ? " ↑" : " ↓")}
-                    </th>
-                    <th
-                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
-                      onClick={() => handleComboSortClick("triggers")}
-                    >
-                      Triggers
-                      {comboSortKey === "triggers" && (comboSortDir === "asc" ? " ↑" : " ↓")}
-                    </th>
-                    <th
-                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
-                      onClick={() => handleComboSortClick("winRate")}
-                    >
-                      Wins/Losses
-                      {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
-                    </th>
-                    <th
-                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
-                      onClick={() => handleComboSortClick("winRate")}
-                    >
-                      Win%
-                      {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
-                    </th>
-                    <th
-                      className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
-                      onClick={() => handleComboSortClick("netPL")}
-                    >
-                      Net P/L
-                      {comboSortKey === "netPL" && (comboSortDir === "asc" ? " ↑" : " ↓")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comboPairs.slice(0, 50).map((p, idx) => (
-                    <tr key={`${p.strategies.join("|")}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
-                      <td className="py-1 pr-2">
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {p.strategies.join(" • ")}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-1 text-right">{p.correlation.toFixed(2)}</td>
-                      <td className="px-2 py-1 text-right">{p.triggers}</td>
-                      <td className="px-2 py-1 text-right">
-                        {p.wins}/{p.losses}
-                      </td>
-                      <td className="px-2 py-1 text-right">{(p.winRate * 100).toFixed(1)}%</td>
-                      <td
-                        className={cn(
-                          "px-2 py-1 text-right font-semibold",
-                          p.netPL >= 0 ? "text-emerald-400" : "text-rose-400"
-                        )}
-                      >
-                        {formatCompactUsd(p.netPL)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
 {/* Quick Analysis */}
       {analytics && (
         <Card>
@@ -983,46 +837,214 @@ export default function CorrelationMatrixPage() {
         </Card>
       )}
 
-      {comboStats.length > 0 && (
+      {/* Multi-Correlation Combos */}
+      {(comboPairs.length > 0 || comboStats.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Combo Stats</CardTitle>
+            <CardTitle className="text-lg">Multi-Correlation Combos</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="text-left text-muted-foreground">
-                    <th className="px-2 py-1">Pair</th>
-                    <th className="px-2 py-1 text-right">Triggered</th>
-                    <th className="px-2 py-1 text-right">Wins</th>
-                    <th className="px-2 py-1 text-right">Losses</th>
-                    <th className="px-2 py-1 text-right">Win %</th>
-                    <th className="px-2 py-1 text-right">Net P/L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comboStats.slice(0, 30).map((row) => (
-                    <tr key={row.pair} className="border-t border-border/40">
-                      <td className="px-2 py-1">{row.pair}</td>
-                      <td className="px-2 py-1 text-right font-mono text-xs">{row.triggered}</td>
-                      <td className="px-2 py-1 text-right font-mono text-xs text-emerald-500">
-                        {row.wins}
-                      </td>
-                      <td className="px-2 py-1 text-right font-mono text-xs text-rose-500">
-                        {row.losses}
-                      </td>
-                      <td className="px-2 py-1 text-right font-mono text-xs">
-                        {row.winRate.toFixed(1)}%
-                      </td>
-                      <td className="px-2 py-1 text-right font-mono text-xs">
-                        {formatCompactUsd(row.netPL)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <CardContent className="space-y-6">
+            {comboPairs.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Min combo triggers</span>
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-20 rounded-md border bg-background px-2 py-1 text-xs"
+                      value={minTriggers}
+                      onChange={(e) => {
+                        const raw = Number(e.target.value || 0);
+                        setMinTriggers(raw > 0 ? raw : 1);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] text-muted-foreground hover:bg-muted/40"
+                      title="Combos = days when all strategies in the combo traded. Stats reflect those overlapping days only."
+                    >
+                      ?
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Combo size</span>
+                    <select
+                      className="rounded-md border bg-background px-2 py-1 text-xs"
+                      value={comboSize}
+                      onChange={(e) => setComboSize(Number(e.target.value) as ComboSize)}
+                    >
+                      <option value={2}>2-way</option>
+                      <option value={3}>3-way</option>
+                      <option value={4}>4-way</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Sizing</span>
+                    <div className="inline-flex gap-1 rounded-lg border border-border/60 bg-background px-1 py-0.5">
+                      {[
+                        { id: "actual", label: "Actual" },
+                        { id: "oneLot", label: "1-lot" },
+                        { id: "kelly", label: "Kelly" },
+                        { id: "halfKelly", label: "1/2 Kelly" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-[11px]",
+                            sizingMode === opt.id
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted/40"
+                          )}
+                          onClick={() => setSizingMode(opt.id as SizingMode)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Sort by</span>
+                    <Select
+                      value={comboSortKey}
+                      onValueChange={(v) => setComboSortKey(v as ComboSortKey)}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="netPL">Net P/L</SelectItem>
+                        <SelectItem value="winRate">Win %</SelectItem>
+                        <SelectItem value="triggers">Triggers</SelectItem>
+                        <SelectItem value="corr">|Correlation|</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Showing <span className="font-semibold">{comboPairs.length}</span> combos matching filters
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
+                      <tr>
+                        <th className="py-1 pr-2 text-left">Combo (size {comboSize})</th>
+                        <th
+                          className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                          onClick={() => handleComboSortClick("corr")}
+                        >
+                          Corr
+                          {comboSortKey === "corr" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                        </th>
+                        <th
+                          className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                          onClick={() => handleComboSortClick("triggers")}
+                        >
+                          Triggers
+                          {comboSortKey === "triggers" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                        </th>
+                        <th
+                          className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                          onClick={() => handleComboSortClick("winRate")}
+                        >
+                          Wins/Losses
+                          {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                        </th>
+                        <th
+                          className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                          onClick={() => handleComboSortClick("winRate")}
+                        >
+                          Win%
+                          {comboSortKey === "winRate" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                        </th>
+                        <th
+                          className="cursor-pointer px-2 py-1 text-right hover:text-foreground"
+                          onClick={() => handleComboSortClick("netPL")}
+                        >
+                          Net P/L
+                          {comboSortKey === "netPL" && (comboSortDir === "asc" ? " ↑" : " ↓")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comboPairs.slice(0, 50).map((p, idx) => (
+                        <tr key={`${p.strategies.join("|")}-${idx}`} className={idx % 2 === 0 ? "bg-background/40" : ""}>
+                          <td className="py-1 pr-2">
+                            <div className="flex flex-col">
+                              <span className="font-medium">
+                                {p.strategies.join(" • ")}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-1 text-right">{p.correlation.toFixed(2)}</td>
+                          <td className="px-2 py-1 text-right">{p.triggers}</td>
+                          <td className="px-2 py-1 text-right">
+                            {p.wins}/{p.losses}
+                          </td>
+                          <td className="px-2 py-1 text-right">{(p.winRate * 100).toFixed(1)}%</td>
+                          <td
+                            className={cn(
+                              "px-2 py-1 text-right font-semibold",
+                              p.netPL >= 0 ? "text-emerald-400" : "text-rose-400"
+                            )}
+                          >
+                            {formatCompactUsd(p.netPL)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {comboStats.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Combo stats (co-trading days)
+                </div>
+                <div className="overflow-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="px-2 py-1">Pair</th>
+                        <th className="px-2 py-1 text-right">Triggered</th>
+                        <th className="px-2 py-1 text-right">Wins</th>
+                        <th className="px-2 py-1 text-right">Losses</th>
+                        <th className="px-2 py-1 text-right">Win %</th>
+                        <th className="px-2 py-1 text-right">Net P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comboStats.slice(0, 30).map((row) => (
+                        <tr key={row.pair} className="border-t border-border/40">
+                          <td className="px-2 py-1">{row.pair}</td>
+                          <td className="px-2 py-1 text-right font-mono text-xs">{row.triggered}</td>
+                          <td className="px-2 py-1 text-right font-mono text-xs text-emerald-500">
+                            {row.wins}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-xs text-rose-500">
+                            {row.losses}
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-xs">
+                            {row.winRate.toFixed(1)}%
+                          </td>
+                          <td className="px-2 py-1 text-right font-mono text-xs">
+                            {formatCompactUsd(row.netPL)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
