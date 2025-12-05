@@ -1,221 +1,165 @@
-import type { DailyPnLPoint } from "@/lib/analytics/pl-analytics";
-
-export type KellyMode = "conservative" | "balanced" | "aggressive";
-
-export interface StrategyAllocationStats {
-  strategy: string;
-  pf?: number;
-  romPct?: number;
-  maxDrawdownPct?: number;
-  avgFundsPct?: number;
-  marginSpikePct?: number;
-  clusterId?: number;
+export interface DailyPnLPoint {
+  date: string; // "2023-05-01"
+  pnl: number;  // portfolio P/L for that day (backtest basis)
 }
 
-export interface KellyV3Inputs {
-  dailyPnl: DailyPnLPoint[];
-  startingCapital: number;
-  baselinePortfolioKellyPct: number;
-  strategies: StrategyAllocationStats[];
-}
-
-export interface StrategyKellyRecommendation {
-  strategy: string;
-  clusterId?: number;
+export interface KellyV3StrategyInput {
+  name: string;
   pf: number;
   romPct: number;
-  maxDrawdownPct: number;
-  avgFundsPct: number;
-  marginSpikePct: number;
-  riskScore: number; // 0..1
-  tier: "T1" | "T2" | "T3";
-  kellyPctConservative: number;
-  kellyPctBalanced: number;
-  kellyPctAggressive: number;
+  avgFundsPctPerTrade: number;
+  marginSpikeFactor?: number;
+  tier?: number;
 }
 
-export interface PortfolioKellyCurvePoint {
-  kellyScale: number;
-  portfolioKellyPct: number;
-  estMaxDdPct: number;
-  cagrPct: number;
+export interface KellyV3Row {
+  name: string;
+  pf: number;
+  romPct: number;
+  marginSpikeFactor: number;
+  rawKellyPct: number;
+  baseKellyPct: number;
+  finalKellyPct: number;
+}
+
+export interface KellyV3CurvePoint {
+  scale: number;     // 0.55, 0.80, 0.85, 0.90, 1.00
+  maxDdPct: number;  // max drawdown %
+  cagrPct: number;   // CAGR %
+}
+
+export interface KellyV3Params {
+  dailyPnl: DailyPnLPoint[];
+  startingCapital: number;
+  targetMaxDdPct: number;
+  strategies: KellyV3StrategyInput[];
+  lockRealizedWeights: boolean;
 }
 
 export interface KellyV3Result {
   baselineMaxDdPct: number;
-  baselineCagrPct: number;
-  baselinePortfolioKellyPct: number;
-  strategies: StrategyKellyRecommendation[];
-  curve: PortfolioKellyCurvePoint[];
-  suggestedScale: {
-    conservative?: PortfolioKellyCurvePoint;
-    balanced?: PortfolioKellyCurvePoint;
-    aggressive?: PortfolioKellyCurvePoint;
-  };
+  portfolioKellyScale: number;
+  estMaxDdPct: number;
+  rows: KellyV3Row[];
+  curve: KellyV3CurvePoint[];
 }
 
-const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-
-function computeTierThresholds(scores: number[]) {
-  if (!scores.length) {
-    return { t1Min: 0.66, t2Min: 0.4 };
+function computeEquityCurve(dailyPnl: DailyPnLPoint[], startingCapital: number, scale: number): number[] {
+  const equity: number[] = [];
+  let current = startingCapital;
+  for (const p of dailyPnl) {
+    current += p.pnl * scale;
+    equity.push(current);
   }
-  const sorted = [...scores].sort((a, b) => a - b);
-  const q60 = sorted[Math.floor(0.6 * (sorted.length - 1))];
-  const q30 = sorted[Math.floor(0.3 * (sorted.length - 1))];
-  return { t1Min: q60, t2Min: q30 };
+  return equity;
 }
 
-function decideTier(score: number, thresholds: { t1Min: number; t2Min: number }): "T1" | "T2" | "T3" {
-  if (score >= thresholds.t1Min) return "T1";
-  if (score >= thresholds.t2Min) return "T2";
-  return "T3";
-}
-
-/**
- * Build an equity curve at a given Kelly scale and return max DD and CAGR.
- */
-function simulateEquityForScale(
-  dailyPnl: DailyPnLPoint[],
-  startingCapital: number,
-  kellyScale: number
-): { finalEquity: number; maxDdPct: number; cagrPct: number } {
-  let equity = startingCapital;
-  let peak = startingCapital;
+function computeMaxDrawdownPct(equity: number[]): number {
+  if (!equity.length) return 0;
+  let peak = equity[0];
   let maxDd = 0;
+  for (const v of equity) {
+    if (v > peak) peak = v;
+    const dd = (peak - v) / peak;
+    if (dd > maxDd) maxDd = dd;
+  }
+  return maxDd * 100;
+}
 
-  for (const day of dailyPnl) {
-    const scaled = day.pl * kellyScale;
-    equity += scaled;
-    peak = Math.max(peak, equity);
-    if (peak > 0) {
-      const dd = (peak - equity) / peak;
-      maxDd = Math.max(maxDd, dd);
+function computeCagrPct(equity: number[], startingCapital: number, tradingDaysPerYear = 252): number {
+  if (!equity.length || startingCapital <= 0) return 0;
+  const ending = equity[equity.length - 1];
+  const years = equity.length / tradingDaysPerYear;
+  if (years <= 0) return 0;
+  const cagr = Math.pow(ending / startingCapital, 1 / years) - 1;
+  return cagr * 100;
+}
+
+export function computeAdvancedKellyV3(params: KellyV3Params): KellyV3Result {
+  const { dailyPnl, startingCapital, targetMaxDdPct, strategies, lockRealizedWeights } = params;
+
+  if (!dailyPnl.length || !strategies.length || startingCapital <= 0) {
+    return {
+      baselineMaxDdPct: 0,
+      portfolioKellyScale: 1,
+      estMaxDdPct: 0,
+      rows: [],
+      curve: [],
+    };
+  }
+
+  // Baseline equity and DD at 1.0x
+  const baselineEquity = computeEquityCurve(dailyPnl, startingCapital, 1.0);
+  const baselineMaxDdPct = computeMaxDrawdownPct(baselineEquity);
+
+  // Curve across candidate scales
+  const candidateScales = [0.55, 0.8, 0.85, 0.9, 1.0];
+  const curve: KellyV3CurvePoint[] = candidateScales.map((scale) => {
+    const eq = computeEquityCurve(dailyPnl, startingCapital, scale);
+    return {
+      scale,
+      maxDdPct: computeMaxDrawdownPct(eq),
+      cagrPct: computeCagrPct(eq, startingCapital),
+    };
+  });
+
+  // Choose scale closest to target DD (prefer under target)
+  const clippedTarget = Math.max(5, Math.min(40, targetMaxDdPct || baselineMaxDdPct));
+  let chosen = curve[0];
+  for (const pt of curve) {
+    if (pt.maxDdPct <= clippedTarget) {
+      if (pt.maxDdPct > chosen.maxDdPct || chosen.maxDdPct > clippedTarget) {
+        chosen = pt;
+      }
     }
   }
-
-  const days = dailyPnl.length || 1;
-  const years = days / 252;
-  const cagr = years > 0 ? Math.pow(equity / startingCapital, 1 / years) - 1 : 0;
-
-  return {
-    finalEquity: equity,
-    maxDdPct: maxDd * 100,
-    cagrPct: cagr * 100,
-  };
-}
-
-function normalize(values: number[]): (v: number | undefined) => number {
-  const finite = values.filter((v) => Number.isFinite(v));
-  if (finite.length === 0) return () => 0.5;
-  const min = Math.min(...finite);
-  const max = Math.max(...finite);
-  if (max === min) return () => 0.5;
-  return (v) => {
-    if (v === undefined || !Number.isFinite(v)) return 0.5;
-    return (v - min) / (max - min);
-  };
-}
-
-function tierKelly(tier: "T1" | "T2" | "T3", mode: KellyMode): [number, number] {
-  if (tier === "T1") {
-    if (mode === "conservative") return [6, 8];
-    if (mode === "balanced") return [10, 12];
-    return [12, 14];
+  if (chosen.maxDdPct > clippedTarget) {
+    chosen = curve.reduce((best, pt) => (pt.maxDdPct < best.maxDdPct ? pt : best));
   }
-  if (tier === "T2") {
-    if (mode === "conservative") return [4, 6];
-    if (mode === "balanced") return [6, 8];
-    return [8, 10];
-  }
-  // T3
-  if (mode === "conservative") return [2, 4];
-  if (mode === "balanced") return [4, 6];
-  return [6, 8];
-}
+  const portfolioKellyScale = chosen.scale;
+  const estMaxDdPct = chosen.maxDdPct;
 
-export function computeAdvancedKellyV3(inputs: KellyV3Inputs): KellyV3Result {
-  const { dailyPnl, startingCapital, baselinePortfolioKellyPct, strategies } = inputs;
-  const kellyScales = [0.55, 0.8, 0.85, 0.9, 1];
-
-  const baseline = simulateEquityForScale(dailyPnl, startingCapital, 1);
-
-  // strategy risk scores
-  const pfNorm = normalize(strategies.map((s) => s.pf ?? 0));
-  const romNorm = normalize(strategies.map((s) => s.romPct ?? 0));
-  const ddNorm = normalize(strategies.map((s) => s.maxDrawdownPct ?? 0));
-  const marginNorm = normalize(strategies.map((s) => s.marginSpikePct ?? 0));
-
+  // Risk weights
   const riskScores = strategies.map((s) => {
-    const pfScore = pfNorm(s.pf ?? 0);
-    const romScore = romNorm(s.romPct ?? 0);
-    const ddScore = 1 - ddNorm(s.maxDrawdownPct ?? 0);
-    const marginScore = 1 - marginNorm(s.marginSpikePct ?? 0);
-    const allocBoost = clamp((s.avgFundsPct ?? 0) / 10, 0, 0.2);
-    const riskScore = clamp(0.25 * pfScore + 0.25 * romScore + 0.25 * ddScore + 0.25 * marginScore + allocBoost, 0, 1);
-    return riskScore;
+    const pfEdge = Math.max(0, s.pf - 1);
+    const romBoost = 1 + s.romPct / 50;
+    const marginPenalty = 1 + (s.marginSpikeFactor ?? 0);
+    const tierPenalty = s.tier === 1 ? 1 : s.tier === 2 ? 1.1 : 1.25;
+    let score = (pfEdge * romBoost) / (marginPenalty * tierPenalty);
+    if (score <= 0 && s.avgFundsPctPerTrade > 0) {
+      score = s.avgFundsPctPerTrade / 100;
+    }
+    return Math.max(score, 0.0001);
   });
 
-  const thresholds = computeTierThresholds(riskScores);
+  const totalRisk = riskScores.reduce((a, b) => a + b, 0) || 1;
+  let realizedTotal = strategies.reduce((sum, s) => sum + (s.avgFundsPctPerTrade || 0), 0);
+  if (realizedTotal <= 0) realizedTotal = 1;
 
-  const strategyRecs: StrategyKellyRecommendation[] = strategies.map((s, idx) => {
-    const pfScore = pfNorm(s.pf ?? 0);
-    const romScore = romNorm(s.romPct ?? 0);
-    const ddScore = 1 - ddNorm(s.maxDrawdownPct ?? 0);
-    const marginScore = 1 - marginNorm(s.marginSpikePct ?? 0);
-    const allocBoost = clamp((s.avgFundsPct ?? 0) / 10, 0, 0.2);
-    const riskScore = riskScores[idx];
-    const tier = decideTier(riskScore, thresholds);
-
-    const [consLo, consHi] = tierKelly(tier, "conservative");
-    const [balLo, balHi] = tierKelly(tier, "balanced");
-    const [aggLo, aggHi] = tierKelly(tier, "aggressive");
-
-    const chooseMid = (lo: number, hi: number) => (lo + hi) / 2;
-
+  const rows: KellyV3Row[] = strategies.map((s, idx) => {
+    const marginSpikeFactor = s.marginSpikeFactor ?? 0;
+    const baseWeight = lockRealizedWeights
+      ? (s.avgFundsPctPerTrade || 0.01) / realizedTotal
+      : riskScores[idx] / totalRisk;
+    const rawKellyPct = baseWeight * 100;
+    const baseKellyPct = rawKellyPct;
+    const finalKellyPct = baseKellyPct * portfolioKellyScale;
     return {
-      strategy: s.strategy,
-      clusterId: s.clusterId,
-      pf: s.pf ?? 0,
-      romPct: s.romPct ?? 0,
-      maxDrawdownPct: s.maxDrawdownPct ?? 0,
-      avgFundsPct: s.avgFundsPct ?? 0,
-      marginSpikePct: s.marginSpikePct ?? 0,
-      riskScore,
-      tier,
-      kellyPctConservative: chooseMid(consLo, consHi),
-      kellyPctBalanced: chooseMid(balLo, balHi),
-      kellyPctAggressive: chooseMid(aggLo, aggHi),
+      name: s.name,
+      pf: s.pf,
+      romPct: s.romPct,
+      marginSpikeFactor,
+      rawKellyPct,
+      baseKellyPct,
+      finalKellyPct,
     };
   });
-
-  const curve: PortfolioKellyCurvePoint[] = kellyScales.map((scale) => {
-    const sim = simulateEquityForScale(dailyPnl, startingCapital, scale);
-    return {
-      kellyScale: scale,
-      portfolioKellyPct: baselinePortfolioKellyPct * scale,
-      estMaxDdPct: sim.maxDdPct,
-      cagrPct: sim.cagrPct,
-    };
-  });
-
-  const suggest = (pred: (p: PortfolioKellyCurvePoint) => boolean, fallback: number) => {
-    const found = curve.find(pred);
-    return found ?? curve.find((c) => Math.abs(c.kellyScale - fallback) < 1e-6);
-  };
-
-  const suggestedScale = {
-    conservative: suggest((c) => c.estMaxDdPct <= baseline.maxDdPct * 0.7, 0.55),
-    balanced: suggest((c) => Math.abs(c.kellyScale - 0.8) < 1e-6, 0.8),
-    aggressive: suggest((c) => Math.abs(c.kellyScale - 1) < 1e-6, 1),
-  };
 
   return {
-    baselineMaxDdPct: baseline.maxDdPct,
-    baselineCagrPct: baseline.cagrPct,
-    baselinePortfolioKellyPct,
-    strategies: strategyRecs,
+    baselineMaxDdPct,
+    portfolioKellyScale,
+    estMaxDdPct,
+    rows,
     curve,
-    suggestedScale,
   };
 }

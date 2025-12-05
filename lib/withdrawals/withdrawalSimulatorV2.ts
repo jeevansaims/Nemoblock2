@@ -1,113 +1,105 @@
-/**
- * Trade shape for withdrawal sim. Keeps it minimal and typed locally.
- */
-export interface WithdrawalTrade {
-  closeDate: Date;
-  pnl: number;
-  premium?: number;
-  marginReq?: number;
-  numContracts?: number;
-  fundsAtClose?: number;
+export interface MonthlyPnlPoint {
+  month: string; // "2023-05"
+  pnl: number; // backtest P/L for that month
 }
 
-export interface WithdrawalRule {
-  monthlyWithdrawalPct: number; // e.g. 0.3 => withdraw 30% of profit above high water
-}
+export type WithdrawalMode = "none" | "percent" | "fixed";
 
-export interface WithdrawalSimInputs {
-  trades: WithdrawalTrade[];
+export interface WithdrawalSimulationParams {
+  backtestCapital: number;
   startingCapital: number;
-  baselineKellyScale: number; // Kelly scale of the source P/L (usually 1.0)
-  targetKellyScale: number; // Kelly scale being tested
-  rule: WithdrawalRule;
+  monthlyPnl: MonthlyPnlPoint[];
+  mode: WithdrawalMode;
+  withdrawalPercent?: number; // decimal, e.g. 0.02
+  fixedAmount?: number;
+  withdrawOnlyOnProfits?: boolean;
 }
 
-export interface WithdrawalSimPoint {
-  date: Date;
-  equity: number;
-  withdrawnToDate: number;
+export interface WithdrawalRow {
+  month: string;
+  pnl: number; // scaled P/L
+  withdrawal: number;
+  endingBalance: number;
 }
 
-export interface WithdrawalSimResult {
-  points: WithdrawalSimPoint[];
+export interface WithdrawalSimulationResult {
+  rows: WithdrawalRow[];
   totalWithdrawn: number;
-  finalEquity: number;
+  endingBalance: number;
   cagrPct: number;
   maxDdPct: number;
 }
 
-/**
- * Simulate withdrawals with dynamic sizing:
- * - Re-sizes P/L by equity / startingCapital * targetKelly / baselineKelly.
- * - Withdraws monthlyPct of profits above high water at month boundaries.
- */
-function getTradeCapitalFraction(t: WithdrawalTrade, startingCapital: number): number {
-  const notional =
-    t.fundsAtClose ??
-    t.marginReq ??
-    Math.abs(t.premium ?? 0) * 100 * Math.max(1, t.numContracts ?? 1);
+export function runWithdrawalSimulationV2(params: WithdrawalSimulationParams): WithdrawalSimulationResult {
+  const {
+    backtestCapital,
+    startingCapital,
+    monthlyPnl,
+    mode,
+    withdrawalPercent,
+    fixedAmount,
+    withdrawOnlyOnProfits = true,
+  } = params;
 
-  if (!notional || !startingCapital) return 0;
-  return notional / startingCapital;
-}
-
-export function runWithdrawalSimulationV2(inputs: WithdrawalSimInputs): WithdrawalSimResult {
-  const { trades, startingCapital, baselineKellyScale, targetKellyScale, rule } = inputs;
-
-  const sorted = [...trades].sort((a, b) => a.closeDate.getTime() - b.closeDate.getTime());
-
-  let equity = startingCapital;
-  let highWater = startingCapital;
-  let totalWithdrawn = 0;
-  let maxDd = 0;
-  let currentMonth: string | null = null;
-
-  const points: WithdrawalSimPoint[] = [];
-
-  for (const t of sorted) {
-    const monthKey = `${t.closeDate.getFullYear()}-${t.closeDate.getMonth()}`;
-
-    // Month boundary: take withdrawal on profit above high water.
-    if (currentMonth !== null && monthKey !== currentMonth) {
-      const profit = Math.max(0, equity - highWater);
-      if (profit > 0 && rule.monthlyWithdrawalPct > 0) {
-        const withdrawal = profit * rule.monthlyWithdrawalPct;
-        equity -= withdrawal;
-        totalWithdrawn += withdrawal;
-        highWater = Math.max(highWater, equity);
-      }
-    }
-    currentMonth = monthKey;
-
-    const fraction = getTradeCapitalFraction(t, startingCapital);
-
-    // Dynamic sizing factor relative to original Kelly sizing.
-    const capitalScale = (equity / startingCapital) * (targetKellyScale / baselineKellyScale);
-    const capitalDeployed = equity * fraction * (targetKellyScale / baselineKellyScale);
-    const baselineDeployed = startingCapital * fraction;
-    const sizingFactor = baselineDeployed > 0 ? capitalDeployed / baselineDeployed : capitalScale;
-    const boundedScale = Math.max(0, Math.min(sizingFactor, 2)); // clamp extremes
-    const scaledPnl = t.pnl * boundedScale;
-
-    equity += scaledPnl;
-    highWater = Math.max(highWater, equity);
-    if (highWater > 0) {
-      const dd = (highWater - equity) / highWater;
-      maxDd = Math.max(maxDd, dd);
-    }
-
-    points.push({ date: t.closeDate, equity, withdrawnToDate: totalWithdrawn });
+  if (!monthlyPnl.length || startingCapital <= 0 || backtestCapital <= 0) {
+    return { rows: [], totalWithdrawn: 0, endingBalance: startingCapital, cagrPct: 0, maxDdPct: 0 };
   }
 
-  const days = points.length || 1;
-  const years = days / 252;
-  const cagr = years > 0 ? Math.pow(equity / startingCapital, 1 / years) - 1 : 0;
+  const rows: WithdrawalRow[] = [];
+  let equity = startingCapital;
+  let totalWithdrawn = 0;
+  let highWater = startingCapital;
+  let peakEquity = startingCapital;
+  let maxDd = 0;
+
+  for (const m of monthlyPnl) {
+    const sizeFactor = equity / backtestCapital;
+    const scaledPnl = m.pnl * sizeFactor;
+    let equityBeforeWithdrawal = equity + scaledPnl;
+
+    let withdrawal = 0;
+    const isProfitableMonth = scaledPnl > 0;
+    const isNewHigh = equityBeforeWithdrawal > highWater;
+    const allowed =
+      mode !== "none" &&
+      (!withdrawOnlyOnProfits || (isProfitableMonth && isNewHigh));
+
+    if (allowed) {
+      if (mode === "percent" && withdrawalPercent && withdrawalPercent > 0) {
+        withdrawal = equityBeforeWithdrawal * withdrawalPercent;
+      } else if (mode === "fixed" && fixedAmount && fixedAmount > 0) {
+        withdrawal = Math.min(fixedAmount, equityBeforeWithdrawal);
+      }
+    }
+
+    equityBeforeWithdrawal = Math.max(equityBeforeWithdrawal, 0);
+    const endingBalance = Math.max(equityBeforeWithdrawal - withdrawal, 0);
+
+    highWater = Math.max(highWater, equityBeforeWithdrawal);
+    peakEquity = Math.max(peakEquity, endingBalance);
+    const dd = peakEquity > 0 ? (peakEquity - endingBalance) / peakEquity : 0;
+    if (dd > maxDd) maxDd = dd;
+
+    totalWithdrawn += withdrawal;
+    equity = endingBalance;
+
+    rows.push({ month: m.month, pnl: scaledPnl, withdrawal, endingBalance });
+  }
+
+  const endingBalance = equity;
+  const months = monthlyPnl.length;
+  const years = months / 12;
+  let cagrPct = 0;
+  if (years > 0 && startingCapital > 0) {
+    const cagr = Math.pow(endingBalance / startingCapital || 1, 1 / years) - 1;
+    cagrPct = cagr * 100;
+  }
 
   return {
-    points,
+    rows,
     totalWithdrawn,
-    finalEquity: equity,
-    cagrPct: cagr * 100,
+    endingBalance,
+    cagrPct,
     maxDdPct: maxDd * 100,
   };
 }

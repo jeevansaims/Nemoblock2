@@ -5,19 +5,16 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
-import { KellyOptimizer } from "@/components/pl-analytics/KellyOptimizer";
+import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
+import { runWithdrawalSimulationV2 } from "@/lib/withdrawals/withdrawalSimulatorV2";
 import {
   AvgPLStats,
   RawTrade,
   buildDailyPnL,
   computeAvgPLStats,
-  computeEquityAndWithdrawals,
   normalizeTradesToOneLot,
-  WithdrawalMode,
 } from "@/lib/analytics/pl-analytics";
 import { computeKellyScaleResults, KellyScaleResult } from "@/lib/kelly/kellyOptimizerV2";
 import { cn } from "@/lib/utils";
@@ -56,24 +53,32 @@ type StrategyAllocationRow = {
   maxCapitalUsed: number;
   clusterCorrelation?: number;
 };
-type WithdrawalSimResult = ReturnType<typeof computeEquityAndWithdrawals>;
 
 
 
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
-  const [withdrawMode, setWithdrawMode] = useState<WithdrawalMode>("none");
   const [withdrawPercent, setWithdrawPercent] = useState(30);
-  const [withdrawFixed, setWithdrawFixed] = useState(1_000);
-  const [onlyIfProfitable, setOnlyIfProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
+  const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
+  const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
   }, [normalizeOneLot, trades]);
 
   const daily = useMemo(() => buildDailyPnL(normalizedTrades), [normalizedTrades]);
+  const monthlyPnlPoints = useMemo(() => {
+    const map = new Map<string, number>();
+    normalizedTrades.forEach((t) => {
+      const month = `${t.closedOn.getFullYear()}-${String(t.closedOn.getMonth() + 1).padStart(2, "0")}`;
+      map.set(month, (map.get(month) ?? 0) + t.pl);
+    });
+    return Array.from(map.entries())
+      .map(([month, pnl]) => ({ month, pnl }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }, [normalizedTrades]);
   const avgStats = useMemo(() => computeAvgPLStats(daily), [daily]);
   const kellyScaleResults: KellyScaleResult[] = useMemo(() => {
     if (daily.length === 0) return [];
@@ -89,17 +94,49 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     [kellyScaleResults]
   );
 
-  const sim = useMemo(
+  const kellyV3Result = useMemo(() => {
+    if (daily.length === 0 || allocationRows.length === 0) return null;
+    return computeAdvancedKellyV3({
+      dailyPnl: daily,
+      startingCapital: startingBalance,
+      targetMaxDdPct,
+      strategies: allocationRows.map((r) => ({
+        name: r.strategy,
+        pf: r.pf,
+        romPct: r.rom,
+        avgFundsPctPerTrade: r.avgAlloc,
+        marginSpikeFactor: r.maxCapitalUsed > 0 ? Math.min(1, r.maxCapitalUsed / startingBalance) : 0,
+        tier: 2,
+      })),
+      lockRealizedWeights,
+    });
+  }, [allocationRows, daily, lockRealizedWeights, startingBalance, targetMaxDdPct]);
+
+  const handleExportKellyCsv = () => {
+    if (!kellyV3Result) return;
+    const header = "Strategy,KellyPct\n";
+    const body = kellyV3Result.rows.map((row) => `${row.name},${row.finalKellyPct.toFixed(2)}`).join("\n");
+    const csv = header + body;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "kelly-optimizer-v3.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const withdrawalSim = useMemo(
     () =>
-      computeEquityAndWithdrawals(normalizedTrades, {
+      runWithdrawalSimulationV2({
+        backtestCapital: startingBalance,
         startingCapital: startingBalance,
-        withdrawalMode: withdrawMode,
+        monthlyPnl: monthlyPnlPoints,
+        mode: "percent",
         withdrawalPercent: withdrawPercent / 100,
-        fixedWithdrawal: withdrawFixed,
-        withdrawProfitableMonthsOnly: onlyIfProfitable,
-        normalizeToOneLot: normalizeOneLot,
+        withdrawOnlyOnProfits: true,
       }),
-    [normalizedTrades, startingBalance, withdrawMode, withdrawPercent, withdrawFixed, onlyIfProfitable, normalizeOneLot]
+    [monthlyPnlPoints, startingBalance, withdrawPercent]
   );
 
   const allocationRows = useMemo(() => {
@@ -308,96 +345,204 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           maxMarginUsed: r.maxCapitalUsed,
           clusterCorrelation: r.clusterCorrelation,
         }))}
-        baselineMaxDD={baselineKellyResult?.estMaxDdPct ?? Math.abs(sim.maxDrawdownPct) * 100}
+        baselineMaxDD={baselineKellyResult?.estMaxDdPct ?? 0}
         kellyResults={kellyScaleResults}
       />
 
-      <KellyOptimizer
-        strategies={allocationRows.map((r) => ({
-          strategy: r.strategy,
-          portfolioShare: r.portfolioShare,
-          pf: r.pf,
-          rom: r.rom,
-          maxCapitalUsed: r.maxCapitalUsed,
-        }))}
-        baselineMaxDD={Math.abs(sim.maxDrawdownPct) * 100}
-      />
+      {/* Advanced Kelly Optimizer v3 */}
+      <div className="rounded-2xl border border-border bg-card p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+                Kelly Optimizer (Advanced)
+              </h2>
+              <button
+                type="button"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground"
+                title="PF and ROM% drive raw Kelly. Margin/tier taper it. Portfolio Kelly is scaled to hit target Max DD using the true equity curve."
+              >
+                ?
+              </button>
+            </div>
+            {kellyV3Result && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Baseline Max DD:{" "}
+                <span className="font-mono">{kellyV3Result.baselineMaxDdPct.toFixed(1)}%</span>
+                {" · "}
+                Est. Max DD:{" "}
+                <span className="font-mono">{kellyV3Result.estMaxDdPct.toFixed(1)}%</span>
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">Target Max DD %</span>
+              <Input
+                type="number"
+                className="h-8 w-16 rounded-md border border-border bg-background px-2 text-xs font-mono"
+                value={targetMaxDdPct}
+                min={5}
+                max={40}
+                step={0.5}
+                onChange={(e) => setTargetMaxDdPct(Number(e.target.value) || 0)}
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-3 w-3 rounded border-border"
+                checked={lockRealizedWeights}
+                onChange={(e) => setLockRealizedWeights(e.target.checked)}
+              />
+              <span>Lock realized weights</span>
+            </label>
+
+            <Button size="sm" variant="outline" onClick={handleExportKellyCsv} disabled={!kellyV3Result}>
+              Export CSV
+            </Button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead className="border-b border-border text-[11px] uppercase text-muted-foreground">
+              <tr>
+                <th className="py-2 pr-4 text-left font-medium">Strategy</th>
+                <th className="px-2 py-2 text-right font-medium">PF</th>
+                <th className="px-2 py-2 text-right font-medium">ROM%</th>
+                <th className="px-2 py-2 text-right font-medium">Margin spike</th>
+                <th className="px-2 py-2 text-right font-medium">Base Kelly</th>
+                <th className="px-2 py-2 text-right font-medium">After tiers/margin</th>
+                <th className="px-2 py-2 text-right font-medium">Final (portfolio Kelly)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!kellyV3Result && (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
+                    Not enough data to compute Kelly yet.
+                  </td>
+                </tr>
+              )}
+
+              {kellyV3Result?.rows.map((row) => (
+                <tr key={row.name} className="border-b border-border/40 last:border-0">
+                  <td className="py-2 pr-4 text-left font-medium text-[11px]">{row.name}</td>
+                  <td className="px-2 py-2 text-right font-mono">{row.pf.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right font-mono">{row.romPct.toFixed(1)}%</td>
+                  <td className="px-2 py-2 text-right font-mono">{(row.marginSpikeFactor * 100).toFixed(0)}%</td>
+                  <td className="px-2 py-2 text-right font-mono">{row.rawKellyPct.toFixed(1)}%</td>
+                  <td className="px-2 py-2 text-right font-mono">{row.baseKellyPct.toFixed(1)}%</td>
+                  <td className="px-2 py-2 text-right font-mono text-emerald-400">{row.finalKellyPct.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {kellyV3Result && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
+            <div>
+              Portfolio Kelly:{" "}
+              <span className="font-mono">{(kellyV3Result.portfolioKellyScale * 100).toFixed(1)}%</span>
+            </div>
+            <div>
+              Est. Max DD: <span className="font-mono">{kellyV3Result.estMaxDdPct.toFixed(1)}%</span>
+            </div>
+          </div>
+        )}
+      </div>
 
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Withdrawal Simulator</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Starting balance</Label>
+      {/* Withdrawal Simulator v2 */}
+      <div className="rounded-2xl border border-border bg-card p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Withdrawal Simulator</h2>
+              <button
+                type="button"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground"
+                title="Capital-aware withdrawals: scales trade P/L by current equity vs backtest capital, then applies monthly withdrawals."
+              >
+                ?
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Uses trade-level capital usage (fundsAtClose / margin / premium) to resize as equity changes.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Starting balance</span>
               <Input
                 type="number"
                 value={startingBalance}
                 onChange={(e) => setStartingBalance(Number(e.target.value) || 0)}
+                className="h-8 w-24 text-xs"
               />
             </div>
-
-            <div className="space-y-2">
-              <Label>Withdrawal mode</Label>
-              <div className="flex flex-wrap gap-2">
-                {(["none", "percent", "fixed", "resetToStart"] as WithdrawalMode[]).map((mode) => (
-                  <Button
-                    key={mode}
-                    size="sm"
-                    variant={withdrawMode === mode ? "default" : "outline"}
-                    onClick={() => setWithdrawMode(mode)}
-                  >
-                    {mode === "none"
-                      ? "None"
-                      : mode === "percent"
-                      ? "Percent"
-                      : mode === "fixed"
-                      ? "Fixed $"
-                      : "Reset to start"}
-                  </Button>
-                ))}
-              </div>
-              {withdrawMode === "percent" && (
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={withdrawPercent}
-                    onChange={(e) => setWithdrawPercent(Number(e.target.value) || 0)}
-                  />
-                  <span className="text-sm text-muted-foreground">%</span>
-                </div>
-              )}
-              {withdrawMode === "fixed" && (
-                <Input
-                  type="number"
-                  value={withdrawFixed}
-                  onChange={(e) => setWithdrawFixed(Number(e.target.value) || 0)}
-                />
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Options</Label>
-              <div className="flex items-center gap-2">
-                <Switch checked={onlyIfProfitable} onCheckedChange={setOnlyIfProfitable} />
-                <span className="text-sm text-muted-foreground">Withdraw only on profitable months</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={normalizeOneLot} onCheckedChange={setNormalizeOneLot} />
-                <span className="text-sm text-muted-foreground">
-                  Normalize to 1-lot (divide P/L & basis by contracts)
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">% / month</span>
+              <Input
+                type="number"
+                value={withdrawPercent}
+                min={0}
+                max={100}
+                step={0.25}
+                onChange={(e) => setWithdrawPercent(Number(e.target.value) || 0)}
+                className="h-8 w-20 text-xs"
+              />
             </div>
           </div>
+        </div>
 
-          <MonthlyTable sim={sim} />
-          <EquitySummary sim={sim} />
-          <EquityTable sim={sim} />
-        </CardContent>
-      </Card>
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Month</TableHead>
+                <TableHead className="text-right">P/L (scaled)</TableHead>
+                <TableHead className="text-right">Withdrawal</TableHead>
+                <TableHead className="text-right">Ending balance</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {withdrawalSim.rows.map((row) => (
+                <TableRow key={row.month}>
+                  <TableCell className="font-mono text-xs">{row.month}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.pnl)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs text-amber-300">{fmtUsd(row.withdrawal)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.endingBalance)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 text-[11px] text-muted-foreground">
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+            <div className="uppercase tracking-wide text-[10px]">Total Withdrawn</div>
+            <div className="text-lg font-semibold text-amber-300">{fmtUsd(withdrawalSim.totalWithdrawn)}</div>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+            <div className="uppercase tracking-wide text-[10px]">Final Equity</div>
+            <div className="text-lg font-semibold">{fmtUsd(withdrawalSim.endingBalance)}</div>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+            <div className="uppercase tracking-wide text-[10px]">CAGR</div>
+            <div className="text-lg font-semibold">{withdrawalSim.cagrPct.toFixed(1)}%</div>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+            <div className="uppercase tracking-wide text-[10px]">Max DD</div>
+            <div className="text-lg font-semibold">{withdrawalSim.maxDdPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -427,98 +572,4 @@ function StatsGrid({ stats }: { stats: AvgPLStats }) {
   );
 }
 
-function MonthlyTable({ sim }: { sim: ReturnType<typeof computeEquityAndWithdrawals> }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Monthly P/L & Withdrawals</h3>
-        <div className="text-xs text-muted-foreground">
-          {sim.monthly.length} months • Total withdrawn {fmtUsd(sim.totalWithdrawn)}
-        </div>
-      </div>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Month</TableHead>
-              <TableHead className="text-right">P/L</TableHead>
-              <TableHead className="text-right">Withdrawal</TableHead>
-              <TableHead className="text-right">Ending Balance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sim.monthly.map((row) => (
-              <TableRow key={row.month}>
-                <TableCell className="font-medium">{row.month}</TableCell>
-                <TableCell className={cn("text-right font-mono", row.pl >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                  {fmtUsd(row.pl)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-amber-300">{fmtUsd(row.withdrawal)}</TableCell>
-                <TableCell className="text-right font-mono">{fmtUsd(row.endingEquity)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-function EquitySummary({ sim }: { sim: WithdrawalSimResult }) {
-  const items = [
-    { label: "Ending Capital", value: sim.endingCapital },
-    { label: "Total P/L", value: sim.totalPL },
-    { label: "Total Withdrawn", value: sim.totalWithdrawn },
-    { label: "Max Drawdown", value: `${(sim.maxDrawdownPct * 100).toFixed(2)}%` },
-  ];
-  return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-      {items.map((item) => (
-        <Card key={item.label}>
-          <CardContent className="p-3">
-            <div className="text-[11px] uppercase tracking-wide text-neutral-500">{item.label}</div>
-            <div className="text-lg font-semibold">
-              {typeof item.value === "number" && !Number.isNaN(item.value) ? fmtUsd(item.value) : item.value}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function EquityTable({ sim }: { sim: ReturnType<typeof computeEquityAndWithdrawals> }) {
-  const rows = sim.daily.slice(-30); // show recent 30 days
-  if (rows.length === 0) return null;
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold">Recent Daily Equity (last {rows.length} days)</h3>
-      <div className="rounded-lg border max-h-80 overflow-y-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead className="text-right">Day P/L</TableHead>
-              <TableHead className="text-right">Withdrawal</TableHead>
-              <TableHead className="text-right">Equity</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((p) => (
-              <TableRow key={p.date}>
-                <TableCell>{p.date}</TableCell>
-                <TableCell className={cn("text-right font-mono", p.dayPL >= 0 ? "text-emerald-400" : "text-rose-400")}>
-                  {fmtUsd(p.dayPL)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-amber-300">
-                  {p.withdrawal > 0 ? fmtUsd(p.withdrawal) : "$0"}
-                </TableCell>
-                <TableCell className="text-right font-mono">{fmtUsd(p.equityAfterWithdrawal)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
+// legacy helper components removed for brevity
