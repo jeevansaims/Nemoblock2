@@ -33,6 +33,24 @@ const fmtUsd = (v: number) => {
   return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 };
 
+
+type AllocationSort =
+  | "portfolioShare"
+  | "netPL"
+  | "rom"
+  | "peakAlloc"
+  | "avgAlloc";
+
+type StrategyAllocationRow = {
+  strategy: string;
+  trades: number;
+  avgAlloc: number;
+  portfolioShare: number;
+  peakDaily: number;
+  netPL: number;
+  rom: number;
+};
+
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
   const [withdrawMode, setWithdrawMode] = useState<WithdrawalMode>("none");
