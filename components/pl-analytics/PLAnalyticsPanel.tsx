@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
 import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
-import { runWithdrawalSimulationV2 } from "@/lib/withdrawals/withdrawalSimulatorV2";
+import { runWithdrawalSimulationV3 } from "@/lib/withdrawals/withdrawalSimulatorV2";
 import {
   AvgPLStats,
   RawTrade,
@@ -69,16 +69,6 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   }, [normalizeOneLot, trades]);
 
   const daily = useMemo(() => buildDailyPnL(normalizedTrades), [normalizedTrades]);
-  const monthlyPnlPoints = useMemo(() => {
-    const map = new Map<string, number>();
-    normalizedTrades.forEach((t) => {
-      const month = `${t.closedOn.getFullYear()}-${String(t.closedOn.getMonth() + 1).padStart(2, "0")}`;
-      map.set(month, (map.get(month) ?? 0) + t.pl);
-    });
-    return Array.from(map.entries())
-      .map(([month, pnl]) => ({ month, pnl }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-  }, [normalizedTrades]);
   const avgStats = useMemo(() => computeAvgPLStats(daily), [daily]);
   const kellyScaleResults: KellyScaleResult[] = useMemo(() => {
     if (daily.length === 0) return [];

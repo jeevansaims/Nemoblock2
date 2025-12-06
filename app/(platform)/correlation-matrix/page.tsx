@@ -74,32 +74,35 @@ export default function CorrelationMatrixPage() {
   const [comboSortDir, setComboSortDir] = useState<ComboSortDir>("desc");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
 
-  const normalizeReturnLocal = (trade: Trade, mode: CorrelationNormalization) => {
-    const sizedPL = (() => {
-      const lots = Math.max(1, Math.abs(trade.numContracts ?? 1));
-      if (sizingMode === "oneLot") {
-        return trade.pl / lots;
-      }
-      if (sizingMode === "halfKelly") {
-        return trade.pl * 0.5;
-      }
-      // "actual" and "kelly" both use recorded P/L; Kelly scaling would be handled upstream if present.
-      return trade.pl;
-    })();
+  const normalizeReturnLocal = useCallback(
+    (trade: Trade, mode: CorrelationNormalization) => {
+      const sizedPL = (() => {
+        const lots = Math.max(1, Math.abs(trade.numContracts ?? 1));
+        if (sizingMode === "oneLot") {
+          return trade.pl / lots;
+        }
+        if (sizingMode === "halfKelly") {
+          return trade.pl * 0.5;
+        }
+        // "actual" and "kelly" both use recorded P/L; Kelly scaling would be handled upstream if present.
+        return trade.pl;
+      })();
 
-    switch (mode) {
-      case "margin":
-        if (!trade.marginReq) return null;
-        return sizedPL / trade.marginReq;
-      case "notional": {
-        const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
-        if (!notional) return null;
-        return sizedPL / notional;
+      switch (mode) {
+        case "margin":
+          if (!trade.marginReq) return null;
+          return sizedPL / trade.marginReq;
+        case "notional": {
+          const notional = Math.abs((trade.openingPrice || 0) * (trade.numContracts || 0));
+          if (!notional) return null;
+          return sizedPL / notional;
+        }
+        default:
+          return sizedPL;
       }
-      default:
-        return sizedPL;
-    }
-  };
+    },
+    [sizingMode]
+  );
 
   const getTradeDateKeyLocal = (trade: Trade, basis: CorrelationDateBasis): string | null => {
     const date = basis === "closed" ? trade.dateClosed : trade.dateOpened;
