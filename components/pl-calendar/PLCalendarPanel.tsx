@@ -223,7 +223,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const [yearBlocks, setYearBlocks] = useState<CalendarBlockConfig[]>([
-    { id: "block-1", portfolioId: "all" },
+    { id: "block-1", portfolioId: "all", isPrimary: true },
   ]);
 
   const strategies = useMemo(() => {
@@ -239,12 +239,14 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     setYearBlocks((prev) =>
       prev.length >= 4
         ? prev
-        : [...prev, { id: `block-${prev.length + 1}`, portfolioId: "all" }]
+        : [...prev, { id: `block-${prev.length + 1}`, portfolioId: undefined, isPrimary: false }]
     );
   };
 
   const removeYearBlock = (id: string) => {
-    setYearBlocks((prev) => (prev.length <= 1 ? prev : prev.filter((b) => b.id !== id)));
+    setYearBlocks((prev) =>
+      prev.filter((b) => (b.isPrimary ? true : b.id !== id))
+    );
   };
 
   const updateYearBlockPortfolio = (id: string, portfolioId: string) => {
@@ -1089,7 +1091,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                   block={block}
                   onChangePortfolio={(pid) => updateYearBlockPortfolio(block.id, pid)}
                   onClose={() => removeYearBlock(block.id)}
-                  disableClose={yearBlocks.length === 1 && idx === 0}
                 >
                   <YearHeatmap
                     data={yearlySnapshot}
