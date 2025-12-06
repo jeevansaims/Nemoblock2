@@ -65,6 +65,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawOnlyProfitable, setWithdrawOnlyProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [resetToStartMonthly, setResetToStartMonthly] = useState(false);
+  const [baseCapital, setBaseCapital] = useState(160_000);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
@@ -229,6 +230,21 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportWithdrawalCsv = () => {
+    const header = "Month,PnL,Withdrawal,Equity\n";
+    const body = withdrawalSim.points
+      .map((p) => `${p.month},${p.pnl.toFixed(2)},${p.withdrawal.toFixed(2)},${p.equity.toFixed(2)}`)
+      .join("\n");
+    const csv = header + body;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "withdrawal-simulation.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const withdrawalSim = useMemo(
     () =>
       runWithdrawalSimulationV2({
@@ -242,6 +258,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           fundsAtClose: t.fundsAtClose,
         })),
         startingBalance,
+        baseCapital,
         mode: withdrawalMode,
         percent: withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
         fixedDollar: withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
@@ -252,6 +269,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     [
       normalizedTrades,
       startingBalance,
+      baseCapital,
       withdrawalMode,
       withdrawPercent,
       withdrawalFixed,
@@ -500,6 +518,15 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 className="h-8 w-24 text-xs"
               />
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Base capital</span>
+              <Input
+                type="number"
+                value={baseCapital}
+                onChange={(e) => setBaseCapital(Number(e.target.value) || 0)}
+                className="h-8 w-24 text-xs"
+              />
+            </div>
 
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Withdrawal mode</span>
@@ -553,6 +580,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               className="h-8"
               onClick={() => {
                 setStartingBalance(160_000);
+                setBaseCapital(160_000);
                 setWithdrawalMode("none");
                 setWithdrawPercent(30);
                 setWithdrawalFixed(0);
@@ -560,6 +588,14 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               }}
             >
               Reset to start
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={handleExportWithdrawalCsv}
+            >
+              Export CSV
             </Button>
           </div>
         </div>
