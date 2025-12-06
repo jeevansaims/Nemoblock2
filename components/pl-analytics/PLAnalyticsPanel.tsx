@@ -75,6 +75,16 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   }, [normalizeOneLot, trades]);
 
   const daily = useMemo(() => buildDailyPnL(normalizedTrades), [normalizedTrades]);
+  const monthlyPnlPoints = useMemo(() => {
+    const monthly = new Map<string, number>();
+    daily.forEach((d) => {
+      const key = d.date.slice(0, 7); // YYYY-MM
+      monthly.set(key, (monthly.get(key) ?? 0) + d.pl);
+    });
+    return Array.from(monthly.entries())
+      .map(([month, pnl]) => ({ month, pnl }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }, [daily]);
   const avgStats = useMemo(() => computeAvgPLStats(daily), [daily]);
   const kellyScaleResults: KellyScaleResult[] = useMemo(() => {
     if (daily.length === 0) return [];
@@ -248,34 +258,24 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const withdrawalSim = useMemo(
     () =>
       runWithdrawalSimulationV2({
-        trades: normalizedTrades.map((t) => ({
-          openedOn: t.openedOn,
-          closedOn: t.closedOn,
-          pl: t.pl,
-          premium: t.premium,
-          marginReq: t.marginReq,
-          numContracts: t.contracts,
-          fundsAtClose: t.fundsAtClose,
-        })),
         startingBalance,
         baseCapital,
         mode: withdrawalMode,
         percent: withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
         fixedDollar: withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
         withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
-        normalizeToOneLot: normalizeOneLot,
         resetToStartingBalance: resetToStartMonthly,
+        months: monthlyPnlPoints,
       }),
     [
-      normalizedTrades,
       startingBalance,
       baseCapital,
       withdrawalMode,
       withdrawPercent,
       withdrawalFixed,
       withdrawOnlyProfitable,
-      normalizeOneLot,
       resetToStartMonthly,
+      monthlyPnlPoints,
     ]
   );
 
