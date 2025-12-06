@@ -39,6 +39,7 @@ import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
 import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
+import { YearViewBlock, CalendarBlockConfig } from "./YearViewBlock";
 
 interface PLCalendarPanelProps {
   trades: Trade[];
@@ -221,6 +222,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
+  const [yearBlocks, setYearBlocks] = useState<CalendarBlockConfig[]>([
+    { id: "block-1", portfolioId: "all" },
+  ]);
 
   const strategies = useMemo(() => {
     const s = new Set<string>();
@@ -230,6 +234,22 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     });
     return Array.from(s).sort();
   }, [trades]);
+
+  const addYearBlock = () => {
+    setYearBlocks((prev) =>
+      prev.length >= 4
+        ? prev
+        : [...prev, { id: `block-${prev.length + 1}`, portfolioId: "all" }]
+    );
+  };
+
+  const removeYearBlock = (id: string) => {
+    setYearBlocks((prev) => (prev.length <= 1 ? prev : prev.filter((b) => b.id !== id)));
+  };
+
+  const updateYearBlockPortfolio = (id: string, portfolioId: string) => {
+    setYearBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, portfolioId } : b)));
+  };
 
   const filteredTrades = useMemo(() => {
     if (selectedStrategies.length === 0) return trades;
@@ -1048,46 +1068,72 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            <YearHeatmap
-              data={yearlySnapshot}
-              metric={heatmapMetric}
-              onMonthClick={(year, monthIndex) => {
-                const newDate = new Date(currentDate);
-                newDate.setFullYear(year);
-                newDate.setMonth(monthIndex);
-                setCurrentDate(newDate);
-                setView("month");
-              }}
-            />
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                Average Monthly P/L (across visible years)
-              </h3>
-              <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3 lg:grid-cols-6">
-                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
-                  const stats = averageMonthlyStats[idx];
-                  const value =
-                    heatmapMetric === "rom"
-                      ? stats?.avgRom ?? 0
-                      : stats?.avgPL ?? 0;
-                  const positive = value >= 0;
-                  const formatted =
-                    heatmapMetric === "rom"
-                      ? `${value.toFixed(1)}%`
-                      : formatCompactUsd(value);
-                  return (
-                    <div
-                      key={label}
-                      className="rounded-md bg-muted/40 px-1.5 py-1 text-center"
-                    >
-                      <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
-                      <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
-                        {formatted}
-                      </div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm uppercase tracking-wide text-muted-foreground">
+                Yearly P/L Overview
+              </h2>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={addYearBlock}
+                disabled={yearBlocks.length >= 4}
+              >
+                + Add block
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {yearBlocks.map((block, idx) => (
+                <YearViewBlock
+                  key={block.id}
+                  block={block}
+                  onChangePortfolio={(pid) => updateYearBlockPortfolio(block.id, pid)}
+                  onClose={() => removeYearBlock(block.id)}
+                  disableClose={yearBlocks.length === 1 && idx === 0}
+                >
+                  <YearHeatmap
+                    data={yearlySnapshot}
+                    metric={heatmapMetric}
+                    onMonthClick={(year, monthIndex) => {
+                      const newDate = new Date(currentDate);
+                      newDate.setFullYear(year);
+                      newDate.setMonth(monthIndex);
+                      setCurrentDate(newDate);
+                      setView("month");
+                    }}
+                  />
+                  <div className="space-y-2 mt-4">
+                    <h3 className="text-sm font-medium text-muted-foreground">
+                      Average Monthly P/L (across visible years)
+                    </h3>
+                    <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3 lg:grid-cols-6">
+                      {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
+                        const stats = averageMonthlyStats[idx];
+                        const value =
+                          heatmapMetric === "rom"
+                            ? stats?.avgRom ?? 0
+                            : stats?.avgPL ?? 0;
+                        const positive = value >= 0;
+                        const formatted =
+                          heatmapMetric === "rom"
+                            ? `${value.toFixed(1)}%`
+                            : formatCompactUsd(value);
+                        return (
+                          <div
+                            key={label}
+                            className="rounded-md bg-muted/40 px-1.5 py-1 text-center"
+                          >
+                            <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
+                            <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
+                              {formatted}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                </YearViewBlock>
+              ))}
             </div>
           </div>
         )}
