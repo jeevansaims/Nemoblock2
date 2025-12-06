@@ -222,15 +222,14 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [heatmapMetric, setHeatmapMetric] = useState<CalendarMetric>("pl");
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
-  const [yearBlocks, setYearBlocks] = useState<CalendarBlockConfig[]>([
-    { id: "block-1", isPrimary: true },
-  ]);
+  const [yearBlocks, setYearBlocks] = useState<CalendarBlockConfig[]>(() => {
+    if (typeof window === "undefined") {
+      return [{ id: "block-1", isPrimary: true }];
+    }
 
-  // Restore uploaded (non-primary) blocks so uploads persist when navigating away and back.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem("plCalendarYearBlocks");
-    if (!saved) return;
+    if (!saved) return [{ id: "block-1", isPrimary: true }];
+
     try {
       const parsed: CalendarBlockConfig[] = JSON.parse(saved);
       const hydrated = parsed.map((b) => {
@@ -257,11 +256,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         }) as Trade[];
         return { ...b, trades: revived };
       });
-      setYearBlocks([{ id: "block-1", isPrimary: true }, ...hydrated]);
+      return [{ id: "block-1", isPrimary: true }, ...hydrated];
     } catch (err) {
       console.warn("Failed to restore year blocks", err);
+      return [{ id: "block-1", isPrimary: true }];
     }
-  }, []);
+  });
 
   // Persist non-primary blocks (including uploaded trades) to localStorage.
   useEffect(() => {
