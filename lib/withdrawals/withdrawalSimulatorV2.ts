@@ -68,11 +68,10 @@ function bucketMonthlyPnl(trades: WithdrawalTrade[]): Record<string, number> {
 
 export function runBaseEquitySimulation(params: {
   startingBalance: number;
-  baseCapital?: number;
   normalizeToOneLot: boolean;
   trades: WithdrawalTrade[];
 }): BaseSimResult {
-  const { startingBalance, baseCapital, normalizeToOneLot, trades } = params;
+  const { startingBalance, normalizeToOneLot, trades } = params;
   if (!trades.length || startingBalance <= 0) {
     return { points: [], maxDdPct: 0, cagrPct: 0, finalEquity: startingBalance };
   }
@@ -82,12 +81,11 @@ export function runBaseEquitySimulation(params: {
   const months = Object.keys(buckets).sort();
 
   let equity = startingBalance;
-  const denom = baseCapital && baseCapital > 0 ? baseCapital : startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
   const points = months.map((m) => {
-    const monthlyReturn = denom > 0 ? buckets[m] / denom : 0;
-    equity += equity * monthlyReturn;
+    const basePnl = buckets[m];
+    equity += basePnl; // apply the month’s log P/L once (no extra scaling)
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
     return { month: m, equity };
@@ -131,7 +129,9 @@ export function runWithdrawalSimulationV2(params: {
   const buckets = bucketMonthlyPnl(normalized);
   const months = Object.keys(buckets).sort();
 
-  const denom = baseCapital && baseCapital > 0 ? baseCapital : startingBalance;
+  // baseCapital is only used to derive a monthly return if provided; otherwise we just apply the raw P/L
+  const denom = baseCapital && baseCapital > 0 ? baseCapital : undefined;
+
   let equity = startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
@@ -139,11 +139,11 @@ export function runWithdrawalSimulationV2(params: {
   const points: WithdrawalPoint[] = [];
 
   for (const m of months) {
-    const pnl = buckets[m];
+    const basePnl = buckets[m];
 
-    // Apply monthly return to current equity (capital-aware, no double scaling)
-    const monthlyReturn = denom > 0 ? pnl / denom : 0;
-    const grossPnl = equity * monthlyReturn;
+    // Apply monthly return to current equity; if no denom is provided, apply base P/L directly
+    const monthlyReturn = denom ? basePnl / denom : 0;
+    const grossPnl = denom ? equity * monthlyReturn : basePnl;
     equity += grossPnl;
 
     const profitable = grossPnl > 0;
@@ -164,7 +164,7 @@ export function runWithdrawalSimulationV2(params: {
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
 
-    points.push({ month: m, pnl, withdrawal, equity });
+    points.push({ month: m, pnl: grossPnl, withdrawal, equity });
   }
 
   const monthsCount = Math.max(points.length, 1);
