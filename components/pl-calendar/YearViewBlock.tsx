@@ -1,4 +1,5 @@
 import React, { useCallback } from "react";
+import { format, parse } from "date-fns";
 
 import { Trade } from "@/lib/models/trade";
 
@@ -22,6 +23,24 @@ function parseNumber(raw: string | undefined): number {
   const cleaned = raw.replace(/[$,]/g, "").trim();
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
+}
+
+function parseDate(raw: string | undefined): Date | undefined {
+  if (!raw) return undefined;
+  const candidates = [
+    "EEE, MMM d, yyyy h:mm a",
+    "MMM d, yyyy h:mm a",
+    "MMMM d, yyyy h:mm a",
+    "M/d/yyyy h:mm a",
+    "M/d/yyyy",
+    "yyyy-MM-dd",
+  ];
+  for (const fmt of candidates) {
+    const parsed = parse(raw, fmt, new Date());
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? undefined : fallback;
 }
 
 /**
