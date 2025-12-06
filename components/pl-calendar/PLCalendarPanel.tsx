@@ -223,7 +223,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const [sizingMode, setSizingMode] = useState<SizingMode>("actual");
   const [kellyFraction, setKellyFraction] = useState(0.05); // stored as fraction (5% default)
   const [yearBlocks, setYearBlocks] = useState<CalendarBlockConfig[]>([
-    { id: "block-1", portfolioId: "all", isPrimary: true },
+    { id: "block-1", isPrimary: true },
   ]);
 
   const strategies = useMemo(() => {
@@ -239,7 +239,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     setYearBlocks((prev) =>
       prev.length >= 4
         ? prev
-        : [...prev, { id: `block-${prev.length + 1}`, portfolioId: undefined, isPrimary: false }]
+        : [...prev, { id: `block-${prev.length + 1}`, isPrimary: false }]
     );
   };
 
@@ -249,8 +249,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     );
   };
 
-  const updateYearBlockPortfolio = (id: string, portfolioId: string) => {
-    setYearBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, portfolioId } : b)));
+  const updateYearBlockTrades = (id: string, newTrades: Trade[], name?: string) => {
+    setYearBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, trades: newTrades, name } : b))
+    );
   };
 
   const filteredTrades = useMemo(() => {
@@ -259,6 +261,15 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       selectedStrategies.includes(t.strategy || "Custom")
     );
   }, [trades, selectedStrategies]);
+
+  const totalPLAll = useMemo(() => {
+    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+    let total = 0;
+    filteredTrades.forEach((t) => {
+      total += sizedPLMap.get(t) ?? t.pl;
+    });
+    return total;
+  }, [filteredTrades, sizingMode, kellyFraction]);
 
   const tradesByDay = useMemo(() => {
     const map = new Map<string, Trade[]>();
@@ -435,109 +446,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return stats;
   }, [tradesByDay, filteredTrades, sizingMode, kellyFraction]);
 
-  // Aggregate trades by year/month for the heatmap
-  const yearlySnapshot = useMemo<YearlyCalendarSnapshot>(() => {
-    const yearMap = new Map<
-      number,
-      Map<number, { netPL: number; trades: number; wins: number; margin: number }>
-    >();
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-
-    filteredTrades.forEach((trade) => {
-      const dayKey = resolveDayKey(trade);
-      if (!dayKey || dayKey === "1970-01-01") return;
-      const date = parseISO(dayKey);
-      const y = getYear(date);
-      const m = getMonth(date);
-
-      if (!yearMap.has(y)) yearMap.set(y, new Map());
-      const monthMap = yearMap.get(y)!;
-      if (!monthMap.has(m)) monthMap.set(m, { netPL: 0, trades: 0, wins: 0, margin: 0 });
-      const entry = monthMap.get(m)!;
-      const sizedPL = sizedPLMap.get(trade) ?? trade.pl;
-      entry.netPL += sizedPL;
-      entry.trades += 1;
-      if (trade.pl > 0) entry.wins += 1;
-      entry.margin += trade.marginReq || 0;
-    });
-
-    const years = Array.from(yearMap.entries())
-      .map(([year, monthsMap]) => {
-        const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => a[0] - b[0]);
-        let running = 0;
-        const months = sortedMonths.map(([month, vals]) => {
-          running += vals.netPL;
-          return {
-            month,
-            netPL: vals.netPL,
-            trades: vals.trades,
-            winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
-            romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
-            runningNetPL: running,
-          };
-        });
-
-        const total = months.reduce(
-          (acc, m) => {
-            acc.netPL += m.netPL;
-            acc.trades += m.trades;
-            acc.wins += Math.round((m.winRate / 100) * m.trades);
-            acc.margin += monthsMap.get(m.month)?.margin ?? 0;
-            return acc;
-          },
-          { netPL: 0, trades: 0, wins: 0, margin: 0 }
-        );
-
-        return {
-          year,
-          months,
-          total: {
-            netPL: total.netPL,
-            trades: total.trades,
-            winRate: total.trades > 0 ? Math.round((total.wins / total.trades) * 100) : 0,
-            romPct: total.margin > 0 ? (total.netPL / total.margin) * 100 : 0,
-          },
-        };
-      })
-      .sort((a, b) => b.year - a.year);
-
-    return { years };
-  }, [filteredTrades, sizingMode, kellyFraction]);
-
-  const averageMonthlyStats = useMemo(() => {
-    const months = Array.from({ length: 12 }, () => ({
-      sumPL: 0,
-      sumRom: 0,
-      count: 0,
-    }));
-
-    yearlySnapshot.years.forEach((y) => {
-      y.months.forEach((m) => {
-        const idx = m.month;
-        if (idx < 0 || idx > 11) return;
-        months[idx].sumPL += m.netPL;
-        months[idx].sumRom += m.romPct ?? 0;
-        months[idx].count += 1;
-      });
-    });
-
-    return months.map((m, monthIndex) => ({
-      monthIndex,
-      avgPL: m.count > 0 ? m.sumPL / m.count : 0,
-      avgRom: m.count > 0 ? m.sumRom / m.count : 0,
-    }));
-  }, [yearlySnapshot]);
-
-  const allDataStats = useMemo(() => {
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-    let totalPL = 0;
-    filteredTrades.forEach((t) => {
-      totalPL += sizedPLMap.get(t) ?? t.pl;
-  });
-  return { totalPL };
-}, [filteredTrades, sizingMode, kellyFraction]);
-
-  const maxDrawdownPctAll = useMemo(() => {
+    const maxDrawdownPctAll = useMemo(() => {
     if (filteredTrades.length === 0) return 0;
 
     if (sizingMode === "actual") {
@@ -848,12 +757,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             <div
               className={cn(
                 "text-2xl font-bold",
-                (view === "year" ? allDataStats.totalPL : periodStats.netPL) >= 0
+                (view === "year" ? totalPLAll : periodStats.netPL) >= 0
                   ? "text-emerald-500"
                   : "text-rose-500"
               )}
             >
-              {formatCompactUsd(view === "year" ? allDataStats.totalPL : periodStats.netPL)}
+              {formatCompactUsd(view === "year" ? totalPLAll : periodStats.netPL)}
             </div>
           </CardContent>
         </Card>
@@ -1085,55 +994,30 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             </div>
 
             <div className="space-y-4">
-              {yearBlocks.map((block, idx) => (
+              {yearBlocks.map((block) => (
                 <YearViewBlock
                   key={block.id}
                   block={block}
-                  onChangePortfolio={(pid) => updateYearBlockPortfolio(block.id, pid)}
+                  baseTrades={trades}
+                  onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
                   onClose={() => removeYearBlock(block.id)}
-                >
-                  <YearHeatmap
-                    data={yearlySnapshot}
-                    metric={heatmapMetric}
-                    onMonthClick={(year, monthIndex) => {
-                      const newDate = new Date(currentDate);
-                      newDate.setFullYear(year);
-                      newDate.setMonth(monthIndex);
-                      setCurrentDate(newDate);
-                      setView("month");
-                    }}
-                  />
-                  <div className="space-y-2 mt-4">
-                    <h3 className="text-sm font-medium text-muted-foreground">
-                      Average Monthly P/L (across visible years)
-                    </h3>
-                    <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3 lg:grid-cols-6">
-                      {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
-                        const stats = averageMonthlyStats[idx];
-                        const value =
-                          heatmapMetric === "rom"
-                            ? stats?.avgRom ?? 0
-                            : stats?.avgPL ?? 0;
-                        const positive = value >= 0;
-                        const formatted =
-                          heatmapMetric === "rom"
-                            ? `${value.toFixed(1)}%`
-                            : formatCompactUsd(value);
-                        return (
-                          <div
-                            key={label}
-                            className="rounded-md bg-muted/40 px-1.5 py-1 text-center"
-                          >
-                            <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
-                            <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
-                              {formatted}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </YearViewBlock>
+                  renderContent={(blockTrades) => (
+                    <YearlyPLOutput
+                      trades={blockTrades}
+                      selectedStrategies={selectedStrategies}
+                      sizingMode={sizingMode}
+                      kellyFraction={kellyFraction}
+                      heatmapMetric={heatmapMetric}
+                      onMonthClick={(year, monthIndex) => {
+                        const newDate = new Date(currentDate);
+                        newDate.setFullYear(year);
+                        newDate.setMonth(monthIndex);
+                        setCurrentDate(newDate);
+                        setView("month");
+                      }}
+                    />
+                  )}
+                />
               ))}
             </div>
           </div>
@@ -1253,6 +1137,154 @@ function WeeklySummaryGrid({
       })}
     </div>
     </div>
+  );
+}
+
+interface YearlyPLOutputProps {
+  trades: Trade[];
+  selectedStrategies: string[];
+  sizingMode: SizingMode;
+  kellyFraction: number;
+  heatmapMetric: CalendarMetric;
+  onMonthClick: (year: number, monthIndex: number) => void;
+}
+
+function YearlyPLOutput({
+  trades,
+  selectedStrategies,
+  sizingMode,
+  kellyFraction,
+  heatmapMetric,
+  onMonthClick,
+}: YearlyPLOutputProps) {
+  const filtered = useMemo(() => {
+    if (selectedStrategies.length === 0) return trades;
+    return trades.filter((t) => selectedStrategies.includes(t.strategy || "Custom"));
+  }, [trades, selectedStrategies]);
+
+  const yearlySnapshot = useMemo<YearlyCalendarSnapshot>(() => {
+    const yearMap = new Map<
+      number,
+      Map<number, { netPL: number; trades: number; wins: number; margin: number }>
+    >();
+    const sizedPLMap = computeSizedPLMap(filtered, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+
+    filtered.forEach((trade) => {
+      const dayKey = resolveDayKey(trade);
+      if (!dayKey || dayKey === "1970-01-01") return;
+      const date = parseISO(dayKey);
+      const y = getYear(date);
+      const m = getMonth(date);
+
+      if (!yearMap.has(y)) yearMap.set(y, new Map());
+      const monthMap = yearMap.get(y)!;
+      if (!monthMap.has(m)) monthMap.set(m, { netPL: 0, trades: 0, wins: 0, margin: 0 });
+      const entry = monthMap.get(m)!;
+      const sizedPL = sizedPLMap.get(trade) ?? trade.pl;
+      entry.netPL += sizedPL;
+      entry.trades += 1;
+      if (trade.pl > 0) entry.wins += 1;
+      entry.margin += trade.marginReq || 0;
+    });
+
+    const years = Array.from(yearMap.entries())
+      .map(([year, monthsMap]) => {
+        const sortedMonths = Array.from(monthsMap.entries()).sort((a, b) => a[0] - b[0]);
+        let running = 0;
+        const months = sortedMonths.map(([month, vals]) => {
+          running += vals.netPL;
+          return {
+            month,
+            netPL: vals.netPL,
+            trades: vals.trades,
+            winRate: vals.trades > 0 ? Math.round((vals.wins / vals.trades) * 100) : 0,
+            romPct: vals.margin > 0 ? (vals.netPL / vals.margin) * 100 : 0,
+            runningNetPL: running,
+          };
+        });
+
+        const total = months.reduce(
+          (acc, m) => {
+            acc.netPL += m.netPL;
+            acc.trades += m.trades;
+            acc.wins += Math.round((m.winRate / 100) * m.trades);
+            acc.margin += monthsMap.get(m.month)?.margin ?? 0;
+            return acc;
+          },
+          { netPL: 0, trades: 0, wins: 0, margin: 0 }
+        );
+
+        return {
+          year,
+          months,
+          total: {
+            netPL: total.netPL,
+            trades: total.trades,
+            winRate: total.trades > 0 ? Math.round((total.wins / total.trades) * 100) : 0,
+            romPct: total.margin > 0 ? (total.netPL / total.margin) * 100 : 0,
+          },
+        };
+      })
+      .sort((a, b) => b.year - a.year);
+
+    return { years };
+  }, [filtered, sizingMode, kellyFraction]);
+
+  const averageMonthlyStats = useMemo(() => {
+    const months = Array.from({ length: 12 }, () => ({
+      sumPL: 0,
+      sumRom: 0,
+      count: 0,
+    }));
+
+    yearlySnapshot.years.forEach((y) => {
+      y.months.forEach((m) => {
+        const idx = m.month;
+        if (idx < 0 || idx > 11) return;
+        months[idx].sumPL += m.netPL;
+        months[idx].sumRom += m.romPct ?? 0;
+        months[idx].count += 1;
+      });
+    });
+
+    return months.map((m) => ({
+      avgPL: m.count > 0 ? m.sumPL / m.count : 0,
+      avgRom: m.count > 0 ? m.sumRom / m.count : 0,
+    }));
+  }, [yearlySnapshot]);
+
+  return (
+    <>
+      <YearHeatmap data={yearlySnapshot} metric={heatmapMetric} onMonthClick={onMonthClick} />
+      <div className="space-y-2 mt-4">
+        <h3 className="text-sm font-medium text-muted-foreground">Average Monthly P/L (across visible years)</h3>
+        <div className="grid grid-cols-2 gap-1 text-xs sm:grid-cols-3 lg:grid-cols-6">
+          {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((label, idx) => {
+            const stats = averageMonthlyStats[idx];
+            const value =
+              heatmapMetric === "rom"
+                ? stats?.avgRom ?? 0
+                : stats?.avgPL ?? 0;
+            const positive = value >= 0;
+            const formatted =
+              heatmapMetric === "rom"
+                ? `${value.toFixed(1)}%`
+                : formatCompactUsd(value);
+            return (
+              <div
+                key={label}
+                className="rounded-md bg-muted/40 px-1.5 py-1 text-center"
+              >
+                <div className="mb-0.5 text-[10px] text-muted-foreground">{label}</div>
+                <div className={positive ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>
+                  {formatted}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
