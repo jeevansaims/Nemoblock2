@@ -55,11 +55,18 @@ function parseDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
   const candidates = [
     "EEE, MMM d, yyyy h:mm a",
+    "EEE, MMM d, yyyy, h:mm a",
     "MMM d, yyyy h:mm a",
     "MMMM d, yyyy h:mm a",
     "M/d/yyyy h:mm a",
+    "M/d/yy h:mm a",
     "M/d/yyyy",
+    "M/d/yy",
     "yyyy-MM-dd",
+    "yyyy/MM/dd",
+    "EEE, MMM d, yyyy HH:mm:ss",
+    "yyyy-MM-dd HH:mm:ss",
+    "yyyy-MM-dd HH:mm",
   ];
   for (const fmt of candidates) {
     const parsed = parse(raw, fmt, new Date());
@@ -81,10 +88,11 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
 
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(",").map((h) => h.trim());
+  const headers = splitCsvLine(lines[0]).map((h) => h.trim());
+  const normalizedHeader = headers.map((h) => h.toLowerCase());
   const findIndex = (candidates: string[]) => {
     for (const label of candidates) {
-      const idx = headers.indexOf(label);
+      const idx = normalizedHeader.indexOf(label.toLowerCase());
       if (idx !== -1) return idx;
     }
     return -1;
@@ -98,7 +106,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxClosedOn = findIndex(["Closed On", "Date Closed"]);
   const idxAvgClosingCost = findIndex(["Closing Cost", "Avg. Closing Cost"]);
   const idxReasonForClose = findIndex(["Reason for Close", "Reason For Close"]);
-  const idxPL = findIndex(["P/L", "PL", "Net P/L"]);
+  const idxPL = findIndex(["P/L", "PL", "Net P/L", "Net PL"]);
   const idxContracts = findIndex(["No. of Contracts", "Contracts"]);
   const idxFundsAtClose = findIndex(["Funds at Close"]);
   const idxMarginReq = findIndex(["Margin Req.", "Margin Req"]);
@@ -119,13 +127,16 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i];
     if (!row) continue;
-    const cols = row.split(",").map((c) => c.trim());
+    const cols = splitCsvLine(row);
     const get = (idx: number) => (idx >= 0 && idx < cols.length ? cols[idx] : "");
 
     const openedOnRaw = get(idxOpenedOn);
     const openedOn = parseDate(openedOnRaw);
     const closedOnRaw = get(idxClosedOn);
     const closedOn = parseDate(closedOnRaw);
+
+    // Skip if we couldn't parse any meaningful date; avoids 1969/1970 buckets.
+    if (!openedOn && !closedOn) continue;
 
     const strategy = get(idxStrategy) || "Unknown";
 
