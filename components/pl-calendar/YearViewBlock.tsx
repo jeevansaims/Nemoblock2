@@ -26,8 +26,7 @@ function parseNumber(raw: string | undefined): number {
 
 /**
  * Minimal Option Omega CSV parser for ad-hoc uploads in the Year view.
- * This is intentionally tolerant: missing fields fall back to safe defaults
- * so we can satisfy the required `Trade` shape.
+ * Tolerant: missing fields fall back to safe defaults so we can satisfy Trade.
  */
 function parseOptionOmegaCsv(csvText: string): Trade[] {
   const lines = csvText
@@ -38,33 +37,37 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(",").map((h) => h.trim());
-  const getIndex = (label: string) => headers.indexOf(label);
+  const findIndex = (candidates: string[]) => {
+    for (const label of candidates) {
+      const idx = headers.indexOf(label);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
 
-  const idxDateOpened = getIndex("Date Opened");
-  const idxTimeOpened = getIndex("Time Opened");
-  const idxOpeningPrice = getIndex("Opening Price");
-  const idxLegs = getIndex("Legs");
-  const idxPremium = getIndex("Premium");
-  const idxClosingPrice = getIndex("Closing Price");
-  const idxDateClosed = getIndex("Date Closed");
-  const idxTimeClosed = getIndex("Time Closed");
-  const idxAvgClosingCost = getIndex("Avg. Closing Cost");
-  const idxReasonForClose = getIndex("Reason For Close");
-  const idxPL = getIndex("P/L");
-  const idxContracts = getIndex("No. of Contracts");
-  const idxFundsAtClose = getIndex("Funds at Close");
-  const idxMarginReq = getIndex("Margin Req.");
-  const idxStrategy = getIndex("Strategy");
-  const idxOpeningFees = getIndex("Opening Commissions + Fees");
-  const idxClosingFees = getIndex("Closing Commissions + Fees");
-  const idxOpeningSLR = getIndex("Opening Short/Long Ratio");
-  const idxClosingSLR = getIndex("Closing Short/Long Ratio");
-  const idxOpeningVix = getIndex("Opening VIX");
-  const idxClosingVix = getIndex("Closing VIX");
-  const idxGap = getIndex("Gap");
-  const idxMovement = getIndex("Movement");
-  const idxMaxProfit = getIndex("Max Profit");
-  const idxMaxLoss = getIndex("Max Loss");
+  const idxOpenedOn = findIndex(["Opened On", "Date Opened"]);
+  const idxOpeningPrice = findIndex(["Opening Price"]);
+  const idxLegs = findIndex(["Legs"]);
+  const idxPremium = findIndex(["Premium"]);
+  const idxClosingPrice = findIndex(["Closing Price"]);
+  const idxClosedOn = findIndex(["Closed On", "Date Closed"]);
+  const idxAvgClosingCost = findIndex(["Closing Cost", "Avg. Closing Cost"]);
+  const idxReasonForClose = findIndex(["Reason for Close", "Reason For Close"]);
+  const idxPL = findIndex(["P/L", "PL", "Net P/L"]);
+  const idxContracts = findIndex(["No. of Contracts", "Contracts"]);
+  const idxFundsAtClose = findIndex(["Funds at Close"]);
+  const idxMarginReq = findIndex(["Margin Req.", "Margin Req"]);
+  const idxStrategy = findIndex(["Strategy"]);
+  const idxOpeningFees = findIndex(["Opening Commissions + Fees"]);
+  const idxClosingFees = findIndex(["Closing Commissions + Fees"]);
+  const idxOpeningSLR = findIndex(["Opening S/L Ratio", "Opening Short/Long Ratio"]);
+  const idxClosingSLR = findIndex(["Closing S/L Ratio", "Closing Short/Long Ratio"]);
+  const idxOpeningVix = findIndex(["Opening VIX"]);
+  const idxClosingVix = findIndex(["Closing VIX"]);
+  const idxGap = findIndex(["Gap"]);
+  const idxMovement = findIndex(["Movement"]);
+  const idxMaxProfit = findIndex(["Max Profit"]);
+  const idxMaxLoss = findIndex(["Max Loss"]);
 
   const trades: Trade[] = [];
 
@@ -74,24 +77,23 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     const cols = row.split(",").map((c) => c.trim());
     const get = (idx: number) => (idx >= 0 && idx < cols.length ? cols[idx] : "");
 
-    const dateOpenedRaw = get(idxDateOpened);
-    const timeOpened = get(idxTimeOpened) || "00:00:00";
-    const openedOn = dateOpenedRaw ? new Date(`${dateOpenedRaw} ${timeOpened}`) : new Date("1970-01-01");
-    const dateClosedRaw = get(idxDateClosed);
-    const timeClosed = get(idxTimeClosed) || undefined;
-    const closedOn = dateClosedRaw ? new Date(`${dateClosedRaw} ${timeClosed ?? "00:00:00"}`) : undefined;
+    const openedOnRaw = get(idxOpenedOn);
+    const openedOn = parseDate(openedOnRaw);
+    const closedOnRaw = get(idxClosedOn);
+    const closedOn = parseDate(closedOnRaw);
 
     const strategy = get(idxStrategy) || "Unknown";
 
     const trade: Trade = {
-      dateOpened: openedOn,
-      timeOpened,
+      dateOpened: openedOn ?? new Date("1970-01-01"),
+      timeOpened: "",
+      dayKey: openedOn ? format(openedOn, "yyyy-MM-dd") : undefined,
       openingPrice: parseNumber(get(idxOpeningPrice)),
       legs: get(idxLegs) || "",
       premium: parseNumber(get(idxPremium)),
       closingPrice: parseNumber(get(idxClosingPrice)),
       dateClosed: closedOn,
-      timeClosed: timeClosed || undefined,
+      timeClosed: "",
       avgClosingCost: parseNumber(get(idxAvgClosingCost)),
       reasonForClose: get(idxReasonForClose) || undefined,
       pl: parseNumber(get(idxPL)),
@@ -109,7 +111,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
       movement: parseNumber(get(idxMovement)),
       maxProfit: parseNumber(get(idxMaxProfit)),
       maxLoss: parseNumber(get(idxMaxLoss)),
-    };
+    } as Trade;
 
     trades.push(trade);
   }
