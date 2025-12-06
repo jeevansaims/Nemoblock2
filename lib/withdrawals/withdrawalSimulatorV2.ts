@@ -1,5 +1,3 @@
-
-
 export type WithdrawalMode = "none" | "percentOfProfit" | "fixedDollar";
 
 export interface WithdrawalTrade {
@@ -14,7 +12,7 @@ export interface WithdrawalTrade {
 
 export interface WithdrawalPoint {
   month: string; // YYYY-MM
-  pnl: number; // scaled monthly P/L
+  pnl: number; // monthly P/L (already sized)
   withdrawal: number;
   equity: number; // ending equity after withdrawal
 }
@@ -34,20 +32,38 @@ type BaseSimResult = {
   finalEquity: number;
 };
 
-function computeCapitalFraction(trade: WithdrawalTrade, startingBalance: number): number {
-  const impliedCapital =
-    trade.fundsAtClose ??
-    trade.marginReq ??
-    Math.abs(trade.premium ?? 0) * 100 * Math.max(1, trade.numContracts ?? 1);
-  if (!impliedCapital || startingBalance <= 0) return 0;
-  return impliedCapital / startingBalance;
-}
-
 function computeCagrPct(startingBalance: number, finalEquity: number, months: number): number {
   const years = months / 12;
   if (years <= 0 || startingBalance <= 0) return 0;
   const cagr = Math.pow(finalEquity / startingBalance, 1 / years) - 1;
   return cagr * 100;
+}
+
+function monthKey(date: Date): string {
+  return date.toISOString().slice(0, 7);
+}
+
+function normalizeTrades(trades: WithdrawalTrade[], normalizeToOneLot: boolean): WithdrawalTrade[] {
+  if (!normalizeToOneLot) return trades;
+  return trades.map((t) => {
+    const c = Math.abs(t.numContracts ?? 0) || 1;
+    const factor = 1 / c;
+    return {
+      ...t,
+      pl: t.pl * factor,
+      premium: t.premium !== undefined ? t.premium * factor : t.premium,
+      marginReq: t.marginReq !== undefined ? t.marginReq * factor : t.marginReq,
+    };
+  });
+}
+
+function bucketMonthlyPnl(trades: WithdrawalTrade[]): Record<string, number> {
+  const buckets: Record<string, number> = {};
+  for (const t of trades) {
+    const key = monthKey(t.closedOn ?? t.openedOn);
+    buckets[key] = (buckets[key] ?? 0) + t.pl;
+  }
+  return buckets;
 }
 
 export function runBaseEquitySimulation(params: {
@@ -60,41 +76,17 @@ export function runBaseEquitySimulation(params: {
     return { points: [], maxDdPct: 0, cagrPct: 0, finalEquity: startingBalance };
   }
 
-  const normalized = trades.map((t) => {
-    const c = Math.abs(t.numContracts ?? 0) || 1;
-    const factor = normalizeToOneLot ? 1 / c : 1;
-    return {
-      ...t,
-      pl: t.pl * factor,
-      premium: t.premium !== undefined ? t.premium * factor : t.premium,
-      marginReq: t.marginReq !== undefined ? t.marginReq * factor : t.marginReq,
-    };
-  });
+  const normalized = normalizeTrades(trades, normalizeToOneLot);
+  const buckets = bucketMonthlyPnl(normalized);
+  const months = Object.keys(buckets).sort();
 
-  const sorted = [...normalized].sort((a, b) => a.closedOn.getTime() - b.closedOn.getTime());
-  const buckets: Record<string, { pnl: number }> = {};
   let equity = startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
-
-  const monthKey = (d: Date) => d.toISOString().slice(0, 7);
-
-  for (const t of sorted) {
-    const key = monthKey(t.closedOn ?? t.openedOn);
-    if (!buckets[key]) buckets[key] = { pnl: 0 };
-
-    const frac = computeCapitalFraction(t, startingBalance);
-    const scaledPnl = t.pl * (frac > 0 ? equity / startingBalance : 1);
-    buckets[key].pnl += scaledPnl;
-
-    equity += scaledPnl;
+  const points = months.map((m) => {
+    equity += buckets[m];
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
-  }
-
-  const months = Object.keys(buckets).sort();
-  const points = months.map((m) => {
-    equity += buckets[m].pnl;
     return { month: m, equity };
   });
 
@@ -120,8 +112,8 @@ export function runWithdrawalSimulationV2(params: {
     trades,
     startingBalance,
     mode,
-    percent,
-    fixedDollar,
+    percent = 0,
+    fixedDollar = 0,
     withdrawOnlyProfitableMonths,
     normalizeToOneLot,
   } = params;
@@ -130,63 +122,40 @@ export function runWithdrawalSimulationV2(params: {
     return { points: [], totalWithdrawn: 0, finalEquity: startingBalance, cagrPct: 0, maxDdPct: 0 };
   }
 
-  const normalized = trades.map((t) => {
-    const c = Math.abs(t.numContracts ?? 0) || 1;
-    const factor = normalizeToOneLot ? 1 / c : 1;
-    return {
-      ...t,
-      pl: t.pl * factor,
-      premium: t.premium !== undefined ? t.premium * factor : t.premium,
-      marginReq: t.marginReq !== undefined ? t.marginReq * factor : t.marginReq,
-    };
-  });
-
-  const sorted = [...normalized].sort((a, b) => a.closedOn.getTime() - b.closedOn.getTime());
-  const monthKey = (d: Date) => d.toISOString().slice(0, 7);
+  const normalized = normalizeTrades(trades, normalizeToOneLot);
+  const buckets = bucketMonthlyPnl(normalized);
+  const months = Object.keys(buckets).sort();
 
   let equity = startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
   let totalWithdrawn = 0;
   const points: WithdrawalPoint[] = [];
-  let currentMonth: string | null = null;
-  let monthProfit = 0;
 
-  const flushMonth = (month: string) => {
-    const canWithdraw = !withdrawOnlyProfitableMonths || monthProfit > 0;
+  for (const m of months) {
+    const pnl = buckets[m];
+    equity += pnl;
+
+    const profitable = pnl > 0;
+    const canWithdraw = mode !== "none" && (!withdrawOnlyProfitableMonths || profitable) && equity > 0;
+
     let withdrawal = 0;
-    if (mode === "percentOfProfit" && percent && percent > 0 && canWithdraw && monthProfit > 0) {
-      withdrawal = monthProfit * (percent / 100);
-    } else if (mode === "fixedDollar" && fixedDollar && fixedDollar > 0 && canWithdraw) {
-      withdrawal = Math.min(fixedDollar, equity);
+    if (canWithdraw) {
+      if (mode === "percentOfProfit" && pnl > 0 && percent > 0) {
+        withdrawal = pnl * (percent / 100);
+      } else if (mode === "fixedDollar" && fixedDollar > 0) {
+        withdrawal = Math.min(fixedDollar, equity);
+      }
     }
 
     equity = Math.max(0, equity - withdrawal);
     totalWithdrawn += withdrawal;
-    peak = Math.max(peak, equity);
-    maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
-
-    points.push({ month, pnl: monthProfit, withdrawal, equity });
-    monthProfit = 0;
-  };
-
-  for (const t of sorted) {
-    const key = monthKey(t.closedOn ?? t.openedOn);
-    if (currentMonth !== null && key !== currentMonth) {
-      flushMonth(currentMonth);
-    }
-    currentMonth = key;
-
-    const frac = computeCapitalFraction(t, startingBalance);
-    const scaledPnl = t.pl * (frac > 0 ? equity / startingBalance : 1);
-    equity += scaledPnl;
-    monthProfit += scaledPnl;
 
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
+
+    points.push({ month: m, pnl, withdrawal, equity });
   }
-
-  if (currentMonth !== null) flushMonth(currentMonth);
 
   const monthsCount = Math.max(points.length, 1);
   return {
