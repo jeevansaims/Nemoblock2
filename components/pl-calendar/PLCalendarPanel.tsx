@@ -226,6 +226,45 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     { id: "block-1", isPrimary: true },
   ]);
 
+  // Restore uploaded (non-primary) blocks so uploads persist when navigating away and back.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("plCalendarYearBlocks");
+    if (!saved) return;
+    try {
+      const parsed: CalendarBlockConfig[] = JSON.parse(saved);
+      const hydrated = parsed.map((b) => {
+        if (!b.trades) return b;
+        const revived = (b.trades as Partial<Trade>[]).map((t) => ({
+          ...t,
+          dateOpened: t.dateOpened ? new Date(t.dateOpened as string) : undefined,
+          dateClosed: t.dateClosed ? new Date(t.dateClosed as string) : undefined,
+        })) as Trade[];
+        return { ...b, trades: revived };
+      });
+      setYearBlocks([{ id: "block-1", isPrimary: true }, ...hydrated]);
+    } catch (err) {
+      console.warn("Failed to restore year blocks", err);
+    }
+  }, []);
+
+  // Persist non-primary blocks (including uploaded trades) to localStorage.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const toSave = yearBlocks.filter((b) => !b.isPrimary);
+    const serialized = toSave.map((b) => ({
+      ...b,
+      trades: b.trades?.map((t) => ({
+        ...t,
+        dateOpened:
+          t.dateOpened instanceof Date ? t.dateOpened.toISOString() : t.dateOpened,
+        dateClosed:
+          t.dateClosed instanceof Date ? t.dateClosed.toISOString() : t.dateClosed,
+      })),
+    }));
+    window.localStorage.setItem("plCalendarYearBlocks", JSON.stringify(serialized));
+  }, [yearBlocks]);
+
   const strategies = useMemo(() => {
     const s = new Set<string>();
     trades.forEach((t) => {
