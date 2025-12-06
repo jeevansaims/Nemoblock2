@@ -235,11 +235,26 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       const parsed: CalendarBlockConfig[] = JSON.parse(saved);
       const hydrated = parsed.map((b) => {
         if (!b.trades) return b;
-        const revived = (b.trades as Partial<Trade>[]).map((t) => ({
-          ...t,
-          dateOpened: t.dateOpened ? new Date(t.dateOpened as string) : undefined,
-          dateClosed: t.dateClosed ? new Date(t.dateClosed as string) : undefined,
-        })) as Trade[];
+        const revived = (b.trades as Partial<Trade>[]).map((t) => {
+          const dateOpened =
+            t.dateOpened instanceof Date
+              ? new Date(t.dateOpened.getTime())
+              : typeof t.dateOpened === "string"
+              ? new Date(t.dateOpened)
+              : undefined;
+          const dateClosed =
+            t.dateClosed instanceof Date
+              ? new Date(t.dateClosed.getTime())
+              : typeof t.dateClosed === "string"
+              ? new Date(t.dateClosed)
+              : undefined;
+
+          return {
+            ...t,
+            dateOpened,
+            dateClosed,
+          };
+        }) as Trade[];
         return { ...b, trades: revived };
       });
       setYearBlocks([{ id: "block-1", isPrimary: true }, ...hydrated]);
