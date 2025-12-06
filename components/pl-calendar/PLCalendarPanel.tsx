@@ -294,6 +294,73 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     );
   };
 
+  // Helper to compute per-block summary stats so uploaded logs get their own Net P/L / Trades / Win Rate / Max DD cards.
+  const computeBlockSummary = useCallback(
+    (inputTrades: Trade[]) => {
+      const tradesForSummary =
+        selectedStrategies.length === 0
+          ? inputTrades
+          : inputTrades.filter((t) =>
+              selectedStrategies.includes(t.strategy || "Custom")
+            );
+
+      if (tradesForSummary.length === 0) {
+        return { totalPL: 0, tradeCount: 0, winRate: 0, maxDrawdownPct: 0 };
+      }
+
+      const sizedPLMap = computeSizedPLMap(
+        tradesForSummary,
+        sizingMode,
+        KELLY_BASE_EQUITY,
+        kellyFraction
+      );
+
+      let totalPL = 0;
+      let wins = 0;
+
+      const tradesSorted = [...tradesForSummary].sort((a, b) => {
+        const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
+        const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+        if (da !== db) return da - db;
+        return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
+          b.timeClosed ?? b.timeOpened ?? ""
+        );
+      });
+
+      // Seed equity using funds baseline when available so normalized sizing still references real capital.
+      const first = tradesSorted[0];
+      const baseFromFunds =
+        typeof first.fundsAtClose === "number" && typeof first.pl === "number"
+          ? first.fundsAtClose - first.pl
+          : undefined;
+      let equity =
+        typeof baseFromFunds === "number" && baseFromFunds > 0
+          ? baseFromFunds
+          : 100_000;
+      let peak = equity;
+      let maxDd = 0;
+
+      tradesSorted.forEach((t) => {
+        const sizedPL = sizedPLMap.get(t) ?? t.pl;
+        totalPL += sizedPL;
+        if (sizedPL > 0) wins += 1;
+        equity += sizedPL;
+        peak = Math.max(peak, equity);
+        if (peak > 0) {
+          const dd = (peak - equity) / peak;
+          if (dd > maxDd) maxDd = dd;
+        }
+      });
+
+      const tradeCount = tradesForSummary.length;
+      const winRate = tradeCount > 0 ? Math.round((wins / tradeCount) * 100) : 0;
+      const maxDrawdownPct = maxDd * 100;
+
+      return { totalPL, tradeCount, winRate, maxDrawdownPct };
+    },
+    [selectedStrategies, sizingMode, kellyFraction]
+  );
+
   const filteredTrades = useMemo(() => {
     if (selectedStrategies.length === 0) return trades;
     return trades.filter((t) =>
@@ -1041,20 +1108,81 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                   onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
                   onClose={() => removeYearBlock(block.id)}
                   renderContent={(blockTrades) => (
-                    <YearlyPLOutput
-                      trades={blockTrades}
-                      selectedStrategies={selectedStrategies}
-                      sizingMode={sizingMode}
-                      kellyFraction={kellyFraction}
-                      heatmapMetric={heatmapMetric}
-                      onMonthClick={(year, monthIndex) => {
-                        const newDate = new Date(currentDate);
-                        newDate.setFullYear(year);
-                        newDate.setMonth(monthIndex);
-                        setCurrentDate(newDate);
-                        setView("month");
-                      }}
-                    />
+                    <div className="space-y-4">
+                      {!block.isPrimary && (
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                          {(() => {
+                            const summary = computeBlockSummary(blockTrades);
+                            return (
+                              <>
+                                <Card>
+                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">
+                                      Net P/L (All Data)
+                                    </CardTitle>
+                                    <span className="text-muted-foreground">$</span>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div
+                                      className={cn(
+                                        "text-2xl font-bold",
+                                        summary.totalPL >= 0 ? "text-emerald-500" : "text-rose-500"
+                                      )}
+                                    >
+                                      {formatCompactUsd(summary.totalPL)}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                                <Card>
+                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Total Trades</CardTitle>
+                                    <TableIcon className="h-4 w-4 text-muted-foreground" />
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="text-2xl font-bold">{summary.tradeCount}</div>
+                                  </CardContent>
+                                </Card>
+                                <Card>
+                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+                                    <div className="text-muted-foreground">%</div>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="text-2xl font-bold">{summary.winRate}%</div>
+                                  </CardContent>
+                                </Card>
+                                <Card>
+                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Max Drawdown</CardTitle>
+                                    <div className="text-muted-foreground">%</div>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="text-2xl font-bold text-rose-500">
+                                      {summary.maxDrawdownPct.toFixed(2)}%
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      <YearlyPLOutput
+                        trades={blockTrades}
+                        selectedStrategies={selectedStrategies}
+                        sizingMode={sizingMode}
+                        kellyFraction={kellyFraction}
+                        heatmapMetric={heatmapMetric}
+                        onMonthClick={(year, monthIndex) => {
+                          const newDate = new Date(currentDate);
+                          newDate.setFullYear(year);
+                          newDate.setMonth(monthIndex);
+                          setCurrentDate(newDate);
+                          setView("month");
+                        }}
+                      />
+                    </div>
                   )}
                 />
               ))}
