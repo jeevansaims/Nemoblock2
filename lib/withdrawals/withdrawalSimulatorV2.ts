@@ -68,10 +68,11 @@ function bucketMonthlyPnl(trades: WithdrawalTrade[]): Record<string, number> {
 
 export function runBaseEquitySimulation(params: {
   startingBalance: number;
+  baseCapital?: number;
   normalizeToOneLot: boolean;
   trades: WithdrawalTrade[];
 }): BaseSimResult {
-  const { startingBalance, normalizeToOneLot, trades } = params;
+  const { startingBalance, baseCapital, normalizeToOneLot, trades } = params;
   if (!trades.length || startingBalance <= 0) {
     return { points: [], maxDdPct: 0, cagrPct: 0, finalEquity: startingBalance };
   }
@@ -81,10 +82,12 @@ export function runBaseEquitySimulation(params: {
   const months = Object.keys(buckets).sort();
 
   let equity = startingBalance;
+  const denom = baseCapital && baseCapital > 0 ? baseCapital : startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
   const points = months.map((m) => {
-    equity += buckets[m];
+    const monthlyReturn = denom > 0 ? buckets[m] / denom : 0;
+    equity += equity * monthlyReturn;
     peak = Math.max(peak, equity);
     maxDd = Math.max(maxDd, peak > 0 ? (peak - equity) / peak : 0);
     return { month: m, equity };
@@ -102,6 +105,7 @@ export function runBaseEquitySimulation(params: {
 export function runWithdrawalSimulationV2(params: {
   trades: WithdrawalTrade[];
   startingBalance: number;
+  baseCapital?: number;
   mode: WithdrawalMode;
   percent?: number;
   fixedDollar?: number;
@@ -111,6 +115,7 @@ export function runWithdrawalSimulationV2(params: {
   const {
     trades,
     startingBalance,
+    baseCapital,
     mode,
     percent = 0,
     fixedDollar = 0,
@@ -126,6 +131,7 @@ export function runWithdrawalSimulationV2(params: {
   const buckets = bucketMonthlyPnl(normalized);
   const months = Object.keys(buckets).sort();
 
+  const denom = baseCapital && baseCapital > 0 ? baseCapital : startingBalance;
   let equity = startingBalance;
   let peak = startingBalance;
   let maxDd = 0;
@@ -134,15 +140,19 @@ export function runWithdrawalSimulationV2(params: {
 
   for (const m of months) {
     const pnl = buckets[m];
-    equity += pnl;
 
-    const profitable = pnl > 0;
+    // Apply monthly return to current equity (capital-aware, no double scaling)
+    const monthlyReturn = denom > 0 ? pnl / denom : 0;
+    const grossPnl = equity * monthlyReturn;
+    equity += grossPnl;
+
+    const profitable = grossPnl > 0;
     const canWithdraw = mode !== "none" && (!withdrawOnlyProfitableMonths || profitable) && equity > 0;
 
     let withdrawal = 0;
     if (canWithdraw) {
-      if (mode === "percentOfProfit" && pnl > 0 && percent > 0) {
-        withdrawal = pnl * (percent / 100);
+      if (mode === "percentOfProfit" && grossPnl > 0 && percent > 0) {
+        withdrawal = grossPnl * (percent / 100);
       } else if (mode === "fixedDollar" && fixedDollar > 0) {
         withdrawal = Math.min(fixedDollar, equity);
       }
@@ -170,6 +180,7 @@ export function runWithdrawalSimulationV2(params: {
 export function findMaxSafeWithdrawalPercent(params: {
   trades: WithdrawalTrade[];
   startingBalance: number;
+  baseCapital?: number;
   targetMaxDdPct: number;
   withdrawOnlyProfitableMonths: boolean;
   normalizeToOneLot: boolean;
@@ -179,6 +190,7 @@ export function findMaxSafeWithdrawalPercent(params: {
   const {
     trades,
     startingBalance,
+    baseCapital,
     targetMaxDdPct,
     withdrawOnlyProfitableMonths,
     normalizeToOneLot,
@@ -193,6 +205,7 @@ export function findMaxSafeWithdrawalPercent(params: {
     const result = runWithdrawalSimulationV2({
       trades,
       startingBalance,
+      baseCapital,
       mode: "percentOfProfit",
       percent: pct,
       withdrawOnlyProfitableMonths,
