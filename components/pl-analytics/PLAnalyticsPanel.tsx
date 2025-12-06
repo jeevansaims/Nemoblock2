@@ -64,6 +64,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawalMode, setWithdrawalMode] = useState<WithdrawalMode>("none");
   const [withdrawOnlyProfitable, setWithdrawOnlyProfitable] = useState(true);
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
+  const [resetToStartMonthly, setResetToStartMonthly] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
@@ -246,6 +247,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
         fixedDollar: withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
         withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
         normalizeToOneLot: normalizeOneLot,
+        resetToStartingBalance: resetToStartMonthly,
       }),
     [
       normalizedTrades,
@@ -255,6 +257,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       withdrawalFixed,
       withdrawOnlyProfitable,
       normalizeOneLot,
+      resetToStartMonthly,
     ]
   );
 
@@ -553,6 +556,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 setWithdrawalMode("none");
                 setWithdrawPercent(30);
                 setWithdrawalFixed(0);
+                setResetToStartMonthly(true);
               }}
             >
               Reset to start
@@ -568,6 +572,10 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           <div className="flex items-center gap-2">
             <Switch checked={normalizeOneLot} onCheckedChange={setNormalizeOneLot} />
             <span>Normalize to 1-lot (divide P/L & basis by contracts)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={resetToStartMonthly} onCheckedChange={setResetToStartMonthly} />
+            <span>Reset to starting balance each month (skim all profit)</span>
           </div>
         </div>
 

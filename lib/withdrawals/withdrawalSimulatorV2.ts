@@ -109,6 +109,7 @@ export function runWithdrawalSimulationV2(params: {
   fixedDollar?: number;
   withdrawOnlyProfitableMonths: boolean;
   normalizeToOneLot: boolean;
+  resetToStartingBalance?: boolean;
 }): WithdrawalResult {
   const {
     trades,
@@ -119,6 +120,7 @@ export function runWithdrawalSimulationV2(params: {
     fixedDollar = 0,
     withdrawOnlyProfitableMonths,
     normalizeToOneLot,
+    resetToStartingBalance = false,
   } = params;
 
   if (!trades.length || startingBalance <= 0) {
@@ -156,6 +158,13 @@ export function runWithdrawalSimulationV2(params: {
       } else if (mode === "fixedDollar" && fixedDollar > 0) {
         withdrawal = Math.min(fixedDollar, equity);
       }
+    }
+
+    // Optionally skim all profit to return to the starting balance for the next month
+    if (resetToStartingBalance && equity > startingBalance) {
+      const extra = equity - startingBalance;
+      withdrawal += extra;
+      equity = startingBalance;
     }
 
     equity = Math.max(0, equity - withdrawal);
