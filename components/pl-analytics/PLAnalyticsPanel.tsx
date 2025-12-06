@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
 import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
-import { runWithdrawalSimulationV3 } from "@/lib/withdrawals/withdrawalSimulatorV2";
+import { runWithdrawalSimulationV2, WithdrawalMode } from "@/lib/withdrawals/withdrawalSimulatorV2";
 import {
   AvgPLStats,
   RawTrade,
@@ -59,7 +60,10 @@ type StrategyAllocationRow = {
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
   const [withdrawPercent, setWithdrawPercent] = useState(30);
-  const [normalizeOneLot] = useState(false);
+  const [withdrawalFixed, setWithdrawalFixed] = useState(0);
+  const [withdrawalMode, setWithdrawalMode] = useState<WithdrawalMode>("none");
+  const [withdrawOnlyProfitable, setWithdrawOnlyProfitable] = useState(true);
+  const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
@@ -226,10 +230,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
   const withdrawalSim = useMemo(
     () =>
-      runWithdrawalSimulationV3({
-        backtestCapital: startingBalance,
-        startingCapital: startingBalance,
+      runWithdrawalSimulationV2({
         trades: normalizedTrades.map((t) => ({
+          openedOn: t.openedOn,
           closedOn: t.closedOn,
           pl: t.pl,
           premium: t.premium,
@@ -237,11 +240,22 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           numContracts: t.contracts,
           fundsAtClose: t.fundsAtClose,
         })),
-        mode: "percent",
-        withdrawalPercent: withdrawPercent / 100,
-        withdrawOnlyOnProfits: true,
+        startingBalance,
+        mode: withdrawalMode,
+        percent: withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
+        fixedDollar: withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
+        withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
+        normalizeToOneLot: normalizeOneLot,
       }),
-    [normalizedTrades, startingBalance, withdrawPercent]
+    [
+      normalizedTrades,
+      startingBalance,
+      withdrawalMode,
+      withdrawPercent,
+      withdrawalFixed,
+      withdrawOnlyProfitable,
+      normalizeOneLot,
+    ]
   );
 
   if (trades.length === 0) {
@@ -463,13 +477,13 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               <button
                 type="button"
                 className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground"
-                title="Capital-aware withdrawals: scales trade P/L by current equity vs backtest capital, then applies monthly withdrawals."
+                title="Uses trade-level capital usage (fundsAtClose / margin / premium) to resize as equity changes. Withdrawals are % of monthly profit or fixed $, recomputed statelessly."
               >
                 ?
               </button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Uses trade-level capital usage (fundsAtClose / margin / premium) to resize as equity changes.
+              Profit-based withdrawals; changing % just re-runs the sim on the original log.
             </p>
           </div>
 
@@ -483,18 +497,77 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 className="h-8 w-24 text-xs"
               />
             </div>
+
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">% / month</span>
-              <Input
-                type="number"
-                value={withdrawPercent}
-                min={0}
-                max={100}
-                step={0.25}
-                onChange={(e) => setWithdrawPercent(Number(e.target.value) || 0)}
-                className="h-8 w-20 text-xs"
-              />
+              <span className="text-xs text-muted-foreground">Withdrawal mode</span>
+              <div className="flex flex-wrap gap-2">
+                {(["none", "percentOfProfit", "fixedDollar"] as WithdrawalMode[]).map((mode) => (
+                  <Button
+                    key={mode}
+                    size="sm"
+                    variant={withdrawalMode === mode ? "default" : "outline"}
+                    onClick={() => setWithdrawalMode(mode)}
+                    className="h-8 text-xs"
+                  >
+                    {mode === "none" ? "None" : mode === "percentOfProfit" ? "Percent" : "Fixed $"}
+                  </Button>
+                ))}
+              </div>
             </div>
+
+            {withdrawalMode === "percentOfProfit" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Percent of monthly profit</span>
+                <Input
+                  type="number"
+                  value={withdrawPercent}
+                  min={0}
+                  max={100}
+                  step={0.25}
+                  onChange={(e) => setWithdrawPercent(Number(e.target.value) || 0)}
+                  className="h-8 w-20 text-xs"
+                />
+              </div>
+            )}
+
+            {withdrawalMode === "fixedDollar" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Fixed $ per month</span>
+                <Input
+                  type="number"
+                  value={withdrawalFixed}
+                  min={0}
+                  step={100}
+                  onChange={(e) => setWithdrawalFixed(Number(e.target.value) || 0)}
+                  className="h-8 w-24 text-xs"
+                />
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => {
+                setStartingBalance(160_000);
+                setWithdrawalMode("none");
+                setWithdrawPercent(30);
+                setWithdrawalFixed(0);
+              }}
+            >
+              Reset to start
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Switch checked={withdrawOnlyProfitable} onCheckedChange={setWithdrawOnlyProfitable} />
+            <span>Withdraw only on profitable months</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={normalizeOneLot} onCheckedChange={setNormalizeOneLot} />
+            <span>Normalize to 1-lot (divide P/L & basis by contracts)</span>
           </div>
         </div>
 
@@ -509,12 +582,12 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {withdrawalSim.rows.map((row) => (
+              {withdrawalSim.points.map((row) => (
                 <TableRow key={row.month}>
                   <TableCell className="font-mono text-xs">{row.month}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{fmtUsd(row.pnl)}</TableCell>
                   <TableCell className="text-right font-mono text-xs text-amber-300">{fmtUsd(row.withdrawal)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.endingBalance)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.equity)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -528,7 +601,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
             <div className="uppercase tracking-wide text-[10px]">Final Equity</div>
-            <div className="text-lg font-semibold">{fmtUsd(withdrawalSim.endingBalance)}</div>
+            <div className="text-lg font-semibold">{fmtUsd(withdrawalSim.finalEquity)}</div>
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
             <div className="uppercase tracking-wide text-[10px]">CAGR</div>
