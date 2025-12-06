@@ -414,7 +414,6 @@ export default function CorrelationMatrixPage() {
     minTriggers,
     comboSortKey,
     comboSortDir,
-    sizingMode,
     normalizeReturnLocal,
   ]);
 

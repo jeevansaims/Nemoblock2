@@ -236,15 +236,22 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
   const withdrawalSim = useMemo(
     () =>
-      runWithdrawalSimulationV2({
+      runWithdrawalSimulationV3({
         backtestCapital: startingBalance,
         startingCapital: startingBalance,
-        monthlyPnl: monthlyPnlPoints,
+        trades: normalizedTrades.map((t) => ({
+          closedOn: t.closedOn,
+          pl: t.pl,
+          premium: t.premium,
+          marginReq: t.marginReq,
+          numContracts: t.contracts,
+          fundsAtClose: t.fundsAtClose,
+        })),
         mode: "percent",
         withdrawalPercent: withdrawPercent / 100,
         withdrawOnlyOnProfits: true,
       }),
-    [monthlyPnlPoints, startingBalance, withdrawPercent]
+    [normalizedTrades, startingBalance, withdrawPercent]
   );
 
   if (trades.length === 0) {
