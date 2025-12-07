@@ -314,12 +314,9 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     (inputTrades: Trade[]) => {
       if (inputTrades.length === 0) return 0;
 
-      if (sizingMode === "actual") {
-        const calculator = new PortfolioStatsCalculator();
-        const stats = calculator.calculatePortfolioStats(inputTrades);
-        return Math.abs(stats.maxDrawdown ?? 0);
-      }
-
+      // Normalize trades so active + uploaded blocks feed the SAME pipeline as block stats:
+      // 1) apply sizing to PL
+      // 2) synthesize fundsAtClose via cumulative equity so calculator always has equity data
       const sizedPLMap = computeSizedPLMap(
         inputTrades,
         sizingMode,
@@ -328,8 +325,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       );
 
       const tradesSorted = [...inputTrades].sort((a, b) => {
-        const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
-        const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+        const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
+        const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
         if (da !== db) return da - db;
         return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
           b.timeClosed ?? b.timeOpened ?? ""
@@ -342,21 +339,32 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           ? first.fundsAtClose - first.pl
           : undefined;
 
-      let equity = typeof baseFromFunds === "number" && baseFromFunds > 0 ? baseFromFunds : 100_000;
-      let peak = equity;
-      let maxDd = 0;
+      let equity =
+        typeof baseFromFunds === "number" && baseFromFunds > 0
+          ? baseFromFunds
+          : KELLY_BASE_EQUITY;
 
-      tradesSorted.forEach((t) => {
+      const normalizedTrades: Trade[] = tradesSorted.map((t) => {
         const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
         equity += sizedPL;
-        peak = Math.max(peak, equity);
-        if (peak > 0) {
-          const dd = (peak - equity) / peak;
-          if (dd > maxDd) maxDd = dd;
-        }
+        return {
+          ...t,
+          pl: sizedPL,
+          fundsAtClose: equity,
+          openingCommissionsFees: t.openingCommissionsFees ?? 0,
+          closingCommissionsFees: t.closingCommissionsFees ?? 0,
+        } as Trade;
       });
 
-      return maxDd * 100;
+      const calculator = new PortfolioStatsCalculator();
+      const stats = calculator.calculatePortfolioStats(normalizedTrades);
+      const ddFromCalculator = Math.abs(stats.maxDrawdown ?? 0);
+
+      if (Number.isFinite(ddFromCalculator)) {
+        return ddFromCalculator;
+      }
+
+      return 0;
     },
     [kellyFraction, sizingMode]
   );
