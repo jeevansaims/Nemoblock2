@@ -348,21 +348,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         const stats = calculator.calculatePortfolioStats(tradesForSummary);
         maxDrawdownPct = Math.abs(stats.maxDrawdown ?? 0);
 
-        const hasMissingFunds = tradesForSummary.some(
-          (t) =>
-            typeof t.fundsAtClose !== "number" ||
-            Number.isNaN(t.fundsAtClose) ||
-            t.fundsAtClose === 0
-        );
-
-        // If fundsAtClose is missing/zero in an uploaded log, the calculator can return
-        // extreme values. Fall back to the sized-PL equity curve to keep parity with
-        // the active block.
+        // If we get an impossible DD, fall back to the sized-PL equity curve.
         if (
           !Number.isFinite(maxDrawdownPct) ||
           maxDrawdownPct === 0 ||
-          maxDrawdownPct > 100 ||
-          hasMissingFunds
+          maxDrawdownPct > 100
         ) {
           const tradesSorted = [...tradesForSummary].sort((a, b) => {
             const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
