@@ -427,6 +427,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     [selectedStrategies, sizingMode, kellyFraction]
   );
 
+  const filteredTrades = useMemo(() => {
+    if (selectedStrategies.length === 0) return trades;
+    return trades.filter((t) =>
+      selectedStrategies.includes(t.strategy || "Custom")
+    );
+  }, [trades, selectedStrategies]);
+
   // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
@@ -496,13 +503,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     }
     console.groupEnd();
   }, [filteredTrades, kellyFraction, sizingMode, yearBlocks]);
-
-  const filteredTrades = useMemo(() => {
-    if (selectedStrategies.length === 0) return trades;
-    return trades.filter((t) =>
-      selectedStrategies.includes(t.strategy || "Custom")
-    );
-  }, [trades, selectedStrategies]);
 
   const totalPLAll = useMemo(() => {
     const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
