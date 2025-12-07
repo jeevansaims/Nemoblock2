@@ -187,6 +187,53 @@ export function YearViewBlock({
   const effectiveTrades = isPrimary ? baseTrades : trades ?? [];
   const hasData = isPrimary || (trades && trades.length > 0);
 
+  const handleExport = useCallback(() => {
+    if (!effectiveTrades.length) return;
+
+    const header = [
+      "Date Opened",
+      "Date Closed",
+      "Strategy",
+      "P/L",
+      "Margin Req.",
+      "Funds at Close",
+      "Premium",
+      "Contracts",
+    ];
+
+    const rows = effectiveTrades.map((t) => [
+      t.dateOpened ? format(t.dateOpened, "yyyy-MM-dd") : "",
+      t.dateClosed ? format(t.dateClosed, "yyyy-MM-dd") : "",
+      t.strategy ?? "Custom",
+      t.pl ?? 0,
+      t.marginReq ?? 0,
+      t.fundsAtClose ?? 0,
+      t.premium ?? 0,
+      t.numContracts ?? 0,
+    ]);
+
+    const csv = [header, ...rows]
+      .map((r) =>
+        r
+          .map((cell) => {
+            const value = typeof cell === "number" ? cell.toString() : cell;
+            return `"${value?.toString().replace(/"/g, '""') ?? ""}"`;
+          })
+          .join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = isPrimary
+      ? "pl-calendar-active-log.csv"
+      : `pl-calendar-upload-${block.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [effectiveTrades, isPrimary, block.id]);
+
   const handleFileChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
