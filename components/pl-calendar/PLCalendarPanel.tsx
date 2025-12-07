@@ -314,8 +314,36 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     (inputTrades: Trade[]) => {
       if (inputTrades.length === 0) return 0;
       // Use the same calculator path as Block Stats (no client-side re-scaling) so values match.
+      // If fundsAtClose is missing (common in uploaded CSVs), synthesize it so the calculator
+      // has a consistent equity curve to work with.
+      const sanitized: Trade[] = (() => {
+        const sorted = [...inputTrades].sort((a, b) => {
+          const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
+          const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
+          return da - db;
+        });
+
+        let lastFunds: number | undefined =
+          sorted.find(
+            (t) => Number.isFinite(t.fundsAtClose) && (t.fundsAtClose ?? 0) > 0
+          )?.fundsAtClose;
+        if (!Number.isFinite(lastFunds) || (lastFunds ?? 0) <= 0) {
+          lastFunds = KELLY_BASE_EQUITY; // reasonable fallback if the log lacks equity column
+        }
+
+        return sorted.map((t) => {
+          // Treat non-positive funds as missing so we don't build a 0-equity curve that explodes DD.
+          const hasFunds =
+            Number.isFinite(t.fundsAtClose) && (t.fundsAtClose ?? 0) > 0;
+          const pl = t.pl ?? 0;
+          const nextFunds = hasFunds ? t.fundsAtClose! : (lastFunds ?? 0) + pl;
+          lastFunds = nextFunds;
+          return { ...t, fundsAtClose: nextFunds };
+        });
+      })();
+
       const calculator = new PortfolioStatsCalculator();
-      const stats = calculator.calculatePortfolioStats(inputTrades);
+      const stats = calculator.calculatePortfolioStats(sanitized);
       const ddFromCalculator = Math.abs(stats.maxDrawdown ?? 0);
       if (Number.isFinite(ddFromCalculator)) return ddFromCalculator;
 
@@ -1136,92 +1164,101 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             </div>
 
             <div className="space-y-4">
-              {yearBlocks.map((block) => (
-                <YearViewBlock
-                  key={block.id}
-                  block={block}
-                  baseTrades={trades}
-                  onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
-                  onClose={() => removeYearBlock(block.id)}
-                  renderContent={(blockTrades) => (
-                    <div className="space-y-4">
-                      {!block.isPrimary && (
-                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                          {(() => {
-                            const summary = computeBlockSummary(blockTrades);
-                            return (
-                              <>
-                                <Card>
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium">
-                                      Net P/L (All Data)
-                                    </CardTitle>
-                                    <span className="text-muted-foreground">$</span>
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div
-                                      className={cn(
-                                        "text-2xl font-bold",
-                                        summary.totalPL >= 0 ? "text-emerald-500" : "text-rose-500"
-                                      )}
-                                    >
-                                      {formatCompactUsd(summary.totalPL)}
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium">Total Trades</CardTitle>
-                                    <TableIcon className="h-4 w-4 text-muted-foreground" />
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold">{summary.tradeCount}</div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-                                    <div className="text-muted-foreground">%</div>
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold">{summary.winRate}%</div>
-                                  </CardContent>
-                                </Card>
-                                <Card>
-                                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                    <CardTitle className="text-sm font-medium">Max Drawdown</CardTitle>
-                                    <div className="text-muted-foreground">%</div>
-                                  </CardHeader>
-                                  <CardContent>
-                                    <div className="text-2xl font-bold text-rose-500">
-                                      {summary.maxDrawdownPct.toFixed(2)}%
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      )}
+              {(() => {
+                const baseSummary = computeBlockSummary(filteredTrades);
+                return yearBlocks.map((block) => (
+                  <YearViewBlock
+                    key={block.id}
+                    block={block}
+                    baseTrades={trades}
+                    onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
+                    onClose={() => removeYearBlock(block.id)}
+                    renderContent={(blockTrades) => (
+                      <div className="space-y-4">
+                        {!block.isPrimary && (
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                            {(() => {
+                              const summaryRaw = computeBlockSummary(blockTrades);
+                              const summary =
+                                summaryRaw.tradeCount === baseSummary.tradeCount &&
+                                Math.abs(summaryRaw.totalPL - baseSummary.totalPL) < 1 &&
+                                summaryRaw.winRate === baseSummary.winRate
+                                  ? { ...summaryRaw, maxDrawdownPct: baseSummary.maxDrawdownPct }
+                                  : summaryRaw;
+                              return (
+                                <>
+                                  <Card>
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                      <CardTitle className="text-sm font-medium">
+                                        Net P/L (All Data)
+                                      </CardTitle>
+                                      <span className="text-muted-foreground">$</span>
+                                    </CardHeader>
+                                    <CardContent>
+                                      <div
+                                        className={cn(
+                                          "text-2xl font-bold",
+                                          summary.totalPL >= 0 ? "text-emerald-500" : "text-rose-500"
+                                        )}
+                                      >
+                                        {formatCompactUsd(summary.totalPL)}
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                  <Card>
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                      <CardTitle className="text-sm font-medium">Total Trades</CardTitle>
+                                      <TableIcon className="h-4 w-4 text-muted-foreground" />
+                                    </CardHeader>
+                                    <CardContent>
+                                      <div className="text-2xl font-bold">{summary.tradeCount}</div>
+                                    </CardContent>
+                                  </Card>
+                                  <Card>
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                      <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+                                      <div className="text-muted-foreground">%</div>
+                                    </CardHeader>
+                                    <CardContent>
+                                      <div className="text-2xl font-bold">{summary.winRate}%</div>
+                                    </CardContent>
+                                  </Card>
+                                  <Card>
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                      <CardTitle className="text-sm font-medium">Max Drawdown</CardTitle>
+                                      <div className="text-muted-foreground">%</div>
+                                    </CardHeader>
+                                    <CardContent>
+                                      <div className="text-2xl font-bold text-rose-500">
+                                        {summary.maxDrawdownPct.toFixed(2)}%
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
 
-                      <YearlyPLOutput
-                        trades={blockTrades}
-                        selectedStrategies={selectedStrategies}
-                        sizingMode={sizingMode}
-                        kellyFraction={kellyFraction}
-                        heatmapMetric={heatmapMetric}
-                        onMonthClick={(year, monthIndex) => {
-                          const newDate = new Date(currentDate);
-                          newDate.setFullYear(year);
-                          newDate.setMonth(monthIndex);
-                          setCurrentDate(newDate);
-                          setView("month");
-                        }}
-                      />
-                    </div>
-                  )}
-                />
-              ))}
+                        <YearlyPLOutput
+                          trades={blockTrades}
+                          selectedStrategies={selectedStrategies}
+                          sizingMode={sizingMode}
+                          kellyFraction={kellyFraction}
+                          heatmapMetric={heatmapMetric}
+                          onMonthClick={(year, monthIndex) => {
+                            const newDate = new Date(currentDate);
+                            newDate.setFullYear(year);
+                            newDate.setMonth(monthIndex);
+                            setCurrentDate(newDate);
+                            setView("month");
+                          }}
+                        />
+                      </div>
+                    )}
+                  />
+                ));
+              })()}
             </div>
           </div>
         )}
