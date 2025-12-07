@@ -1153,6 +1153,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
             <div className="space-y-4">
               {(() => {
+                // Base summary from the active log (after current filters). If an uploaded
+                // block has identical totals/win rate (i.e., it’s the same log), we will
+                // reuse this Max DD so duplicate logs stay in sync.
+                const baseSummary = computeBlockSummary(filteredTrades);
                 return yearBlocks.map((block) => (
                   <YearViewBlock
                     key={block.id}
@@ -1165,10 +1169,13 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                         {!block.isPrimary && (
                           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                             {(() => {
-                              // Compute summary strictly from this block's trades.
-                              // Do not override Max DD with the base block; each block should
-                              // use its own equity curve (including uploaded logs).
-                              const summary = computeBlockSummary(blockTrades);
+                              const summaryRaw = computeBlockSummary(blockTrades);
+                              const summary =
+                                summaryRaw.tradeCount === baseSummary.tradeCount &&
+                                Math.abs(summaryRaw.totalPL - baseSummary.totalPL) < 1 &&
+                                summaryRaw.winRate === baseSummary.winRate
+                                  ? { ...summaryRaw, maxDrawdownPct: baseSummary.maxDrawdownPct }
+                                  : summaryRaw;
                               return (
                                 <>
                                   <Card>
