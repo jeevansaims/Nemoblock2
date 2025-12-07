@@ -1153,7 +1153,6 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
             <div className="space-y-4">
               {(() => {
-                const baseSummary = computeBlockSummary(filteredTrades);
                 return yearBlocks.map((block) => (
                   <YearViewBlock
                     key={block.id}
@@ -1166,13 +1165,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
                         {!block.isPrimary && (
                           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                             {(() => {
-                              const summaryRaw = computeBlockSummary(blockTrades);
-                              const summary =
-                                summaryRaw.tradeCount === baseSummary.tradeCount &&
-                                Math.abs(summaryRaw.totalPL - baseSummary.totalPL) < 1 &&
-                                summaryRaw.winRate === baseSummary.winRate
-                                  ? { ...summaryRaw, maxDrawdownPct: baseSummary.maxDrawdownPct }
-                                  : summaryRaw;
+                              // Compute summary strictly from this block's trades.
+                              // Do not override Max DD with the base block; each block should
+                              // use its own equity curve (including uploaded logs).
+                              const summary = computeBlockSummary(blockTrades);
                               return (
                                 <>
                                   <Card>
