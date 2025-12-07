@@ -20,7 +20,11 @@ interface YearViewBlockProps {
 
 function parseNumber(raw: string | undefined): number {
   if (!raw) return 0;
-  const cleaned = raw.replace(/[$,]/g, "").trim();
+  let cleaned = raw.replace(/[$,]/g, "").trim();
+  // Handle parenthesis for negatives, e.g. "(1,234.50)"
+  if (cleaned.startsWith("(") && cleaned.endsWith(")")) {
+    cleaned = `-${cleaned.slice(1, -1)}`;
+  }
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
 }
