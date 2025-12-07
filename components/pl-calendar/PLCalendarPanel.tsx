@@ -313,60 +313,15 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const computeMaxDrawdownForTrades = useCallback(
     (inputTrades: Trade[]) => {
       if (inputTrades.length === 0) return 0;
-
-      // Normalize trades so active + uploaded blocks feed the SAME pipeline as block stats:
-      // 1) apply sizing to PL
-      // 2) synthesize fundsAtClose via cumulative equity so calculator always has equity data
-      const sizedPLMap = computeSizedPLMap(
-        inputTrades,
-        sizingMode,
-        KELLY_BASE_EQUITY,
-        kellyFraction
-      );
-
-      const tradesSorted = [...inputTrades].sort((a, b) => {
-        const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
-        const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
-        if (da !== db) return da - db;
-        return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
-          b.timeClosed ?? b.timeOpened ?? ""
-        );
-      });
-
-      const first = tradesSorted[0];
-      const baseFromFunds =
-        typeof first.fundsAtClose === "number" && typeof first.pl === "number"
-          ? first.fundsAtClose - first.pl
-          : undefined;
-
-      let equity =
-        typeof baseFromFunds === "number" && baseFromFunds > 0
-          ? baseFromFunds
-          : KELLY_BASE_EQUITY;
-
-      const normalizedTrades: Trade[] = tradesSorted.map((t) => {
-        const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
-        equity += sizedPL;
-        return {
-          ...t,
-          pl: sizedPL,
-          fundsAtClose: equity,
-          openingCommissionsFees: t.openingCommissionsFees ?? 0,
-          closingCommissionsFees: t.closingCommissionsFees ?? 0,
-        } as Trade;
-      });
-
+      // Use the same calculator path as Block Stats (no client-side re-scaling) so values match.
       const calculator = new PortfolioStatsCalculator();
-      const stats = calculator.calculatePortfolioStats(normalizedTrades);
+      const stats = calculator.calculatePortfolioStats(inputTrades);
       const ddFromCalculator = Math.abs(stats.maxDrawdown ?? 0);
-
-      if (Number.isFinite(ddFromCalculator)) {
-        return ddFromCalculator;
-      }
+      if (Number.isFinite(ddFromCalculator)) return ddFromCalculator;
 
       return 0;
     },
-    [kellyFraction, sizingMode]
+    []
   );
 
   // Helper to compute per-block summary stats so uploaded logs get their own Net P/L / Trades / Win Rate / Max DD cards.
