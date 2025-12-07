@@ -20,7 +20,8 @@ interface YearViewBlockProps {
 
 function parseNumber(raw: string | undefined): number {
   if (!raw) return 0;
-  let cleaned = raw.replace(/[$,]/g, "").trim();
+  // Strip currency/percent symbols and commas
+  let cleaned = raw.replace(/[$,%]/g, "").trim();
   // Handle parenthesis for negatives, e.g. "(1,234.50)"
   if (cleaned.startsWith("(") && cleaned.endsWith(")")) {
     cleaned = `-${cleaned.slice(1, -1)}`;
@@ -125,6 +126,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMovement = findIndex(["Movement"]);
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
+  const idxDrawdownPct = findIndex(["Drawdown %", "Drawdown", "Drawdown Pct", "DrawdownPct"]);
 
   const trades: Trade[] = [];
 
@@ -171,6 +173,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
       movement: parseNumber(get(idxMovement)),
       maxProfit: parseNumber(get(idxMaxProfit)),
       maxLoss: parseNumber(get(idxMaxLoss)),
+      drawdownPct: parseNumber(get(idxDrawdownPct)),
     } as Trade;
 
     trades.push(trade);
@@ -193,6 +196,15 @@ export function YearViewBlock({
     [baseTrades, isPrimary, trades]
   );
   const hasData = isPrimary || (trades && trades.length > 0);
+
+  // Helper to inspect parsed drawdown percentages from uploaded logs
+  const parsedMaxAbsDrawdown = React.useMemo(() => {
+    const vals = effectiveTrades
+      .map((t) => t.drawdownPct)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    if (!vals.length) return null;
+    return Math.max(...vals.map((v) => Math.abs(v)));
+  }, [effectiveTrades]);
 
   const handleExport = useCallback(() => {
     if (!effectiveTrades.length) return;
@@ -266,6 +278,11 @@ export function YearViewBlock({
           <span className="text-xs uppercase tracking-wide text-slate-500">
             {isPrimary ? "Active log" : name ? `Uploaded log: ${name}` : "Uploaded log"}
           </span>
+          {!isPrimary && parsedMaxAbsDrawdown !== null && (
+            <span className="text-[10px] text-slate-500">
+              Parsed max |DD|: {parsedMaxAbsDrawdown.toFixed(2)}%
+            </span>
+          )}
           {!isPrimary && (
             <label className="cursor-pointer text-xs text-sky-400 underline hover:text-sky-300">
               Upload Option Omega log

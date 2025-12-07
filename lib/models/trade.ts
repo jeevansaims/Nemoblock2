@@ -57,6 +57,12 @@ export interface Trade {
    * Used to scale synthetic losses relative to current account size
    */
   syntheticCapitalRatio?: number
+
+  /**
+   * Optional per-trade drawdown percentage if provided by source logs (e.g., Option Omega).
+   * This is not required for core calculations but can be used for debugging uploaded logs.
+   */
+  drawdownPct?: number
 }
 
 /**
