@@ -348,7 +348,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         const stats = calculator.calculatePortfolioStats(tradesForSummary);
         maxDrawdownPct = Math.abs(stats.maxDrawdown ?? 0);
 
-        const hasMissingFunds = tradesForSummary.some(
+        const hasMissingFunds = tradesForSummary.every(
           (t) =>
             typeof t.fundsAtClose !== "number" ||
             Number.isNaN(t.fundsAtClose) ||
@@ -371,8 +371,8 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             );
           });
 
-          let equity = 0;
-          let peak = 0;
+          let equity = KELLY_BASE_EQUITY;
+          let peak = equity;
           let maxDd = 0;
 
           tradesSorted.forEach((t) => {
@@ -426,6 +426,76 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     },
     [selectedStrategies, sizingMode, kellyFraction]
   );
+
+  // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const uploaded = yearBlocks.find((b) => !b.isPrimary && b.trades && b.trades.length);
+    if (!uploaded?.trades?.length) return;
+
+    const activeTrades = filteredTrades;
+    const uploadedTrades = uploaded.trades;
+
+    const sortTrades = (arr: Trade[]) =>
+      [...arr].sort((a, b) => {
+        const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
+        const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
+        if (da !== db) return da - db;
+        return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
+          b.timeClosed ?? b.timeOpened ?? ""
+        );
+      });
+
+    const sumPL = (arr: Trade[]) => {
+      const sizedMap = computeSizedPLMap(arr, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
+      return arr.reduce((acc, t) => acc + (sizedMap.get(t) ?? t.pl ?? 0), 0);
+    };
+
+    const aSorted = sortTrades(activeTrades);
+    const uSorted = sortTrades(uploadedTrades);
+
+    console.groupCollapsed("P/L Calendar Debug: active vs uploaded trades");
+    console.log("Active length", aSorted.length, "Uploaded length", uSorted.length);
+    console.log("Active total PL (sized)", sumPL(aSorted));
+    console.log("Uploaded total PL (sized)", sumPL(uSorted));
+    console.log("First 5 active", aSorted.slice(0, 5).map((t) => ({
+      closedOn: t.dateClosed ?? t.dateOpened,
+      pl: t.pl,
+      fundsAtClose: t.fundsAtClose,
+    })));
+    console.log("First 5 uploaded", uSorted.slice(0, 5).map((t) => ({
+      closedOn: t.dateClosed ?? t.dateOpened,
+      pl: t.pl,
+      fundsAtClose: t.fundsAtClose,
+    })));
+
+    const n = Math.min(aSorted.length, uSorted.length);
+    for (let i = 0; i < n; i++) {
+      const a = aSorted[i];
+      const u = uSorted[i];
+      const sameDate =
+        (a.dateClosed ?? a.dateOpened)?.toString() ===
+        (u.dateClosed ?? u.dateOpened)?.toString();
+      const samePL = (a.pl ?? 0) === (u.pl ?? 0);
+      const sameFunds = (a.fundsAtClose ?? 0) === (u.fundsAtClose ?? 0);
+      if (!sameDate || !samePL || !sameFunds) {
+        console.warn("First mismatch at index", i, {
+          active: {
+            closedOn: a.dateClosed ?? a.dateOpened,
+            pl: a.pl,
+            fundsAtClose: a.fundsAtClose,
+          },
+          uploaded: {
+            closedOn: u.dateClosed ?? u.dateOpened,
+            pl: u.pl,
+            fundsAtClose: u.fundsAtClose,
+          },
+        });
+        break;
+      }
+    }
+    console.groupEnd();
+  }, [filteredTrades, kellyFraction, sizingMode, yearBlocks]);
 
   const filteredTrades = useMemo(() => {
     if (selectedStrategies.length === 0) return trades;
