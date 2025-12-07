@@ -94,6 +94,10 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   if (lines.length < 2) return [];
 
   const headers = splitCsvLine(lines[0]).map((h) => h.trim());
+  // Strip BOM from the first header if present (common in Excel exports)
+  if (headers.length > 0) {
+    headers[0] = headers[0].replace(/^\uFEFF/, "");
+  }
   const normalizedHeader = headers.map((h) => h.toLowerCase());
   const findIndex = (candidates: string[]) => {
     for (const label of candidates) {
@@ -127,6 +131,12 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
   const idxDrawdownPct = findIndex(["Drawdown %", "Drawdown", "Drawdown Pct", "DrawdownPct"]);
+
+  if (idxDrawdownPct === -1 && process.env.NODE_ENV === "development") {
+    // Surface header keys in dev so we can quickly see why drawdown is missing.
+    // This avoids silent failures that produce 0% parsed drawdown.
+    console.warn("Option Omega CSV: no drawdown column detected. Headers=", headers);
+  }
 
   const trades: Trade[] = [];
 
