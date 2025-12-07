@@ -347,6 +347,40 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         const calculator = new PortfolioStatsCalculator();
         const stats = calculator.calculatePortfolioStats(tradesForSummary);
         maxDrawdownPct = Math.abs(stats.maxDrawdown ?? 0);
+
+        // If fundsAtClose is missing/zero in an uploaded log, the calculator can return
+        // extreme values. Fall back to the sized-PL equity curve to keep parity with
+        // the active block.
+        if (
+          !Number.isFinite(maxDrawdownPct) ||
+          maxDrawdownPct === 0 ||
+          maxDrawdownPct > 100
+        ) {
+          const tradesSorted = [...tradesForSummary].sort((a, b) => {
+            const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
+            const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+            if (da !== db) return da - db;
+            return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
+              b.timeClosed ?? b.timeOpened ?? ""
+            );
+          });
+
+          let equity = 0;
+          let peak = 0;
+          let maxDd = 0;
+
+          tradesSorted.forEach((t) => {
+            const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
+            equity += sizedPL;
+            peak = Math.max(peak, equity);
+            if (peak > 0) {
+              const dd = (peak - equity) / peak;
+              if (dd > maxDd) maxDd = dd;
+            }
+          });
+
+          maxDrawdownPct = maxDd * 100;
+        }
       } else {
         const tradesSorted = [...tradesForSummary].sort((a, b) => {
           const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
