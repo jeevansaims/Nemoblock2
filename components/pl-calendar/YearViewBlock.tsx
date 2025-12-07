@@ -188,7 +188,10 @@ export function YearViewBlock({
 }: YearViewBlockProps) {
   const { isPrimary, trades, name } = block;
 
-  const effectiveTrades = isPrimary ? baseTrades : trades ?? [];
+  const effectiveTrades = React.useMemo(
+    () => (isPrimary ? baseTrades : trades ?? []),
+    [baseTrades, isPrimary, trades]
+  );
   const hasData = isPrimary || (trades && trades.length > 0);
 
   const handleExport = useCallback(() => {

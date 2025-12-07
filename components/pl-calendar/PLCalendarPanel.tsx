@@ -309,6 +309,58 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     );
   };
 
+  // Shared max drawdown + summary helper so active and uploaded blocks use an identical pipeline.
+  const computeMaxDrawdownForTrades = useCallback(
+    (inputTrades: Trade[]) => {
+      if (inputTrades.length === 0) return 0;
+
+      if (sizingMode === "actual") {
+        const calculator = new PortfolioStatsCalculator();
+        const stats = calculator.calculatePortfolioStats(inputTrades);
+        return Math.abs(stats.maxDrawdown ?? 0);
+      }
+
+      const sizedPLMap = computeSizedPLMap(
+        inputTrades,
+        sizingMode,
+        KELLY_BASE_EQUITY,
+        kellyFraction
+      );
+
+      const tradesSorted = [...inputTrades].sort((a, b) => {
+        const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
+        const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+        if (da !== db) return da - db;
+        return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
+          b.timeClosed ?? b.timeOpened ?? ""
+        );
+      });
+
+      const first = tradesSorted[0];
+      const baseFromFunds =
+        typeof first.fundsAtClose === "number" && typeof first.pl === "number"
+          ? first.fundsAtClose - first.pl
+          : undefined;
+
+      let equity = typeof baseFromFunds === "number" && baseFromFunds > 0 ? baseFromFunds : 100_000;
+      let peak = equity;
+      let maxDd = 0;
+
+      tradesSorted.forEach((t) => {
+        const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
+        equity += sizedPL;
+        peak = Math.max(peak, equity);
+        if (peak > 0) {
+          const dd = (peak - equity) / peak;
+          if (dd > maxDd) maxDd = dd;
+        }
+      });
+
+      return maxDd * 100;
+    },
+    [kellyFraction, sizingMode]
+  );
+
   // Helper to compute per-block summary stats so uploaded logs get their own Net P/L / Trades / Win Rate / Max DD cards.
   const computeBlockSummary = useCallback(
     (inputTrades: Trade[]) => {
@@ -341,111 +393,11 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
 
       const tradeCount = tradesForSummary.length;
       const winRate = tradeCount > 0 ? Math.round((wins / tradeCount) * 100) : 0;
-      let maxDrawdownPct = 0;
-
-      if (sizingMode === "actual") {
-        const calculator = new PortfolioStatsCalculator();
-        const stats = calculator.calculatePortfolioStats(tradesForSummary);
-        maxDrawdownPct = Math.abs(stats.maxDrawdown ?? 0);
-
-        const hasMissingFunds = tradesForSummary.some(
-          (t) =>
-            typeof t.fundsAtClose !== "number" ||
-            Number.isNaN(t.fundsAtClose) ||
-            t.fundsAtClose === 0
-        );
-
-        // If DD is out of range or funds are missing/zero, fall back to the sized-PL curve.
-        if (
-          hasMissingFunds ||
-          !Number.isFinite(maxDrawdownPct) ||
-          maxDrawdownPct === 0 ||
-          maxDrawdownPct > 150
-        ) {
-          const tradesSorted = [...tradesForSummary].sort((a, b) => {
-            const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
-            const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
-            if (da !== db) return da - db;
-            return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
-              b.timeClosed ?? b.timeOpened ?? ""
-            );
-          });
-
-          const baseCandidate = tradesSorted.find(
-            (t) =>
-              typeof t.fundsAtClose === "number" &&
-              typeof t.pl === "number" &&
-              !Number.isNaN(t.fundsAtClose) &&
-              !Number.isNaN(t.pl)
-          );
-          const baseFromFunds =
-            baseCandidate && baseCandidate.fundsAtClose !== undefined && baseCandidate.pl !== undefined
-              ? baseCandidate.fundsAtClose - baseCandidate.pl
-              : undefined;
-
-          let equity =
-            typeof baseFromFunds === "number" && baseFromFunds > 0
-              ? baseFromFunds
-              : KELLY_BASE_EQUITY;
-          let peak = equity;
-          let maxDd = 0;
-
-          tradesSorted.forEach((t) => {
-            const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
-            equity += sizedPL;
-            peak = Math.max(peak, equity);
-            if (peak > 0) {
-              const dd = (peak - equity) / peak;
-              if (dd > maxDd) maxDd = dd;
-            }
-          });
-
-          maxDrawdownPct = maxDd * 100;
-        }
-      } else {
-        const tradesSorted = [...tradesForSummary].sort((a, b) => {
-          const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
-          const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
-          if (da !== db) return da - db;
-          return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
-            b.timeClosed ?? b.timeOpened ?? ""
-          );
-        });
-
-        const baseCandidate = tradesSorted.find(
-          (t) =>
-            typeof t.fundsAtClose === "number" &&
-            typeof t.pl === "number" &&
-            !Number.isNaN(t.fundsAtClose) &&
-            !Number.isNaN(t.pl)
-        );
-        const baseFromFunds =
-          baseCandidate && baseCandidate.fundsAtClose !== undefined && baseCandidate.pl !== undefined
-            ? baseCandidate.fundsAtClose - baseCandidate.pl
-            : undefined;
-        let equity =
-          typeof baseFromFunds === "number" && baseFromFunds > 0
-            ? baseFromFunds
-            : 100_000;
-        let peak = equity;
-        let maxDd = 0;
-
-        tradesSorted.forEach((t) => {
-          const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
-          equity += sizedPL;
-          peak = Math.max(peak, equity);
-          if (peak > 0) {
-            const dd = (peak - equity) / peak;
-            if (dd > maxDd) maxDd = dd;
-          }
-        });
-
-        maxDrawdownPct = maxDd * 100;
-      }
+      const maxDrawdownPct = computeMaxDrawdownForTrades(tradesForSummary);
 
       return { totalPL, tradeCount, winRate, maxDrawdownPct };
     },
-    [selectedStrategies, sizingMode, kellyFraction]
+    [computeMaxDrawdownForTrades, selectedStrategies, sizingMode, kellyFraction]
   );
 
   const filteredTrades = useMemo(() => {
@@ -709,46 +661,10 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     return stats;
   }, [tradesByDay, filteredTrades, sizingMode, kellyFraction]);
 
-    const maxDrawdownPctAll = useMemo(() => {
+  const maxDrawdownPctAll = useMemo(() => {
     if (filteredTrades.length === 0) return 0;
-
-    if (sizingMode === "actual") {
-      const calculator = new PortfolioStatsCalculator();
-      const stats = calculator.calculatePortfolioStats(filteredTrades);
-      return Math.abs(stats.maxDrawdown ?? 0);
-    }
-
-    const sizedPLMap = computeSizedPLMap(filteredTrades, sizingMode, KELLY_BASE_EQUITY, kellyFraction);
-
-    const tradesSorted = [...filteredTrades].sort((a, b) => {
-      const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
-      const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
-      if (da !== db) return da - db;
-      return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(b.timeClosed ?? b.timeOpened ?? "");
-    });
-
-    // Seed equity using funds baseline when available so normalized sizing still references real capital.
-    const first = tradesSorted[0];
-    const baseFromFunds =
-      typeof first.fundsAtClose === "number" && typeof first.pl === "number"
-        ? first.fundsAtClose - first.pl
-        : undefined;
-    let equity = typeof baseFromFunds === "number" && baseFromFunds > 0 ? baseFromFunds : 100_000;
-    let peak = equity;
-    let maxDd = 0;
-
-    tradesSorted.forEach((t) => {
-      const sizedPL = sizedPLMap.get(t) ?? t.pl;
-      equity += sizedPL;
-      peak = Math.max(peak, equity);
-      if (peak > 0) {
-        const dd = ((peak - equity) / peak) * 100;
-        maxDd = Math.max(maxDd, dd);
-      }
-    });
-
-    return maxDd;
-  }, [filteredTrades, sizingMode, kellyFraction]);
+    return computeMaxDrawdownForTrades(filteredTrades);
+  }, [computeMaxDrawdownForTrades, filteredTrades]);
 
   // Calculate max margin for the current month to scale utilization bars
   const maxMarginForMonth = useMemo(() => {
