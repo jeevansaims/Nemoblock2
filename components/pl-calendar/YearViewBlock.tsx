@@ -224,15 +224,25 @@ export function YearViewBlock({
             </label>
           )}
         </div>
-        {!isPrimary && (
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onClose}
-            className="text-xs text-slate-500 hover:text-slate-200"
+            onClick={handleExport}
+            disabled={!hasData}
+            className="text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40"
           >
-            ✕
+            Export CSV
           </button>
-        )}
+          {!isPrimary && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs text-slate-500 hover:text-slate-200"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </header>
 
       {!hasData && !isPrimary ? (
