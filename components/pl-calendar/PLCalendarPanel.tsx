@@ -309,6 +309,36 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     );
   };
 
+  // Shared helper so every block (active or uploaded) computes Max DD the same way.
+  const computeMaxDrawdownFromTrades = useCallback(
+    (tradesForSummary: Trade[], sizedPLMap: Map<Trade, number>) => {
+      if (tradesForSummary.length === 0) return 0;
+
+      const sorted = [...tradesForSummary].sort((a, b) => {
+        const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
+        const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
+        return da - db;
+      });
+
+      let equity = 0;
+      let peak = 0;
+      let maxDd = 0;
+
+      sorted.forEach((t) => {
+        const pnl = sizedPLMap.get(t) ?? t.pl ?? 0;
+        equity += pnl;
+        peak = Math.max(peak, equity);
+        if (peak > 0) {
+          const dd = (peak - equity) / peak;
+          if (dd > maxDd) maxDd = dd;
+        }
+      });
+
+      return maxDd * 100;
+    },
+    []
+  );
+
   // Helper to compute per-block summary stats so uploaded logs get their own Net P/L / Trades / Win Rate / Max DD cards.
   const computeBlockSummary = useCallback(
     (inputTrades: Trade[]) => {
@@ -333,47 +363,22 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       let totalPL = 0;
       let wins = 0;
 
-      const tradesSorted = [...tradesForSummary].sort((a, b) => {
-        const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
-        const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
-        if (da !== db) return da - db;
-        return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
-          b.timeClosed ?? b.timeOpened ?? ""
-        );
-      });
-
-      // Seed equity using funds baseline when available so normalized sizing still references real capital.
-      const first = tradesSorted[0];
-      const baseFromFunds =
-        typeof first.fundsAtClose === "number" && typeof first.pl === "number"
-          ? first.fundsAtClose - first.pl
-          : undefined;
-      let equity =
-        typeof baseFromFunds === "number" && baseFromFunds > 0
-          ? baseFromFunds
-          : 100_000;
-      let peak = equity;
-      let maxDd = 0;
-
-      tradesSorted.forEach((t) => {
-        const sizedPL = sizedPLMap.get(t) ?? t.pl;
+      tradesForSummary.forEach((t) => {
+        const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
         totalPL += sizedPL;
         if (sizedPL > 0) wins += 1;
-        equity += sizedPL;
-        peak = Math.max(peak, equity);
-        if (peak > 0) {
-          const dd = (peak - equity) / peak;
-          if (dd > maxDd) maxDd = dd;
-        }
       });
 
       const tradeCount = tradesForSummary.length;
       const winRate = tradeCount > 0 ? Math.round((wins / tradeCount) * 100) : 0;
-      const maxDrawdownPct = maxDd * 100;
+      const maxDrawdownPct = computeMaxDrawdownFromTrades(
+        tradesForSummary,
+        sizedPLMap
+      );
 
       return { totalPL, tradeCount, winRate, maxDrawdownPct };
     },
-    [selectedStrategies, sizingMode, kellyFraction]
+    [selectedStrategies, sizingMode, kellyFraction, computeMaxDrawdownFromTrades]
   );
 
   const filteredTrades = useMemo(() => {
