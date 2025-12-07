@@ -348,7 +348,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         const stats = calculator.calculatePortfolioStats(tradesForSummary);
         maxDrawdownPct = Math.abs(stats.maxDrawdown ?? 0);
 
-        const hasMissingFunds = tradesForSummary.every(
+        const hasMissingFunds = tradesForSummary.some(
           (t) =>
             typeof t.fundsAtClose !== "number" ||
             Number.isNaN(t.fundsAtClose) ||
@@ -371,7 +371,22 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
             );
           });
 
-          let equity = KELLY_BASE_EQUITY;
+          const baseCandidate = tradesSorted.find(
+            (t) =>
+              typeof t.fundsAtClose === "number" &&
+              typeof t.pl === "number" &&
+              !Number.isNaN(t.fundsAtClose) &&
+              !Number.isNaN(t.pl)
+          );
+          const baseFromFunds =
+            baseCandidate && baseCandidate.fundsAtClose !== undefined && baseCandidate.pl !== undefined
+              ? baseCandidate.fundsAtClose - baseCandidate.pl
+              : undefined;
+
+          let equity =
+            typeof baseFromFunds === "number" && baseFromFunds > 0
+              ? baseFromFunds
+              : KELLY_BASE_EQUITY;
           let peak = equity;
           let maxDd = 0;
 
@@ -397,10 +412,16 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           );
         });
 
-        const first = tradesSorted[0];
+        const baseCandidate = tradesSorted.find(
+          (t) =>
+            typeof t.fundsAtClose === "number" &&
+            typeof t.pl === "number" &&
+            !Number.isNaN(t.fundsAtClose) &&
+            !Number.isNaN(t.pl)
+        );
         const baseFromFunds =
-          typeof first.fundsAtClose === "number" && typeof first.pl === "number"
-            ? first.fundsAtClose - first.pl
+          baseCandidate && baseCandidate.fundsAtClose !== undefined && baseCandidate.pl !== undefined
+            ? baseCandidate.fundsAtClose - baseCandidate.pl
             : undefined;
         let equity =
           typeof baseFromFunds === "number" && baseFromFunds > 0
