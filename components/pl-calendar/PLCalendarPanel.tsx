@@ -313,43 +313,31 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   const computeMaxDrawdownForTrades = useCallback(
     (inputTrades: Trade[]) => {
       if (inputTrades.length === 0) return 0;
-      // Use the same calculator path as Block Stats (no client-side re-scaling) so values match.
-      // If fundsAtClose is missing (common in uploaded CSVs), synthesize it so the calculator
-      // has a consistent equity curve to work with.
-      const sanitized: Trade[] = (() => {
-        const sorted = [...inputTrades].sort((a, b) => {
-          const da = new Date(a.dateClosed ?? a.dateOpened ?? 0).getTime();
-          const db = new Date(b.dateClosed ?? b.dateOpened ?? 0).getTime();
-          return da - db;
-        });
 
-        let lastFunds: number | undefined =
-          sorted.find(
-            (t) => Number.isFinite(t.fundsAtClose) && (t.fundsAtClose ?? 0) > 0
-          )?.fundsAtClose;
-        if (!Number.isFinite(lastFunds) || (lastFunds ?? 0) <= 0) {
-          lastFunds = KELLY_BASE_EQUITY; // reasonable fallback if the log lacks equity column
-        }
+      // Apply sizing so DD respects the current sizing mode / Kelly fraction.
+      const sizedPLMap = computeSizedPLMap(
+        inputTrades,
+        sizingMode,
+        KELLY_BASE_EQUITY,
+        kellyFraction
+      );
 
-        return sorted.map((t) => {
-          // Treat non-positive funds as missing so we don't build a 0-equity curve that explodes DD.
-          const hasFunds =
-            Number.isFinite(t.fundsAtClose) && (t.fundsAtClose ?? 0) > 0;
-          const pl = t.pl ?? 0;
-          const nextFunds = hasFunds ? t.fundsAtClose! : (lastFunds ?? 0) + pl;
-          lastFunds = nextFunds;
-          return { ...t, fundsAtClose: nextFunds };
-        });
-      })();
+      // Use the exact same calculator path that Block Stats uses. We only change P/L via sizing
+      // and let the PortfolioStatsCalculator handle drawdown from the provided fundsAtClose
+      // (when present) or its own legacy fallback.
+      const sizedTrades: Trade[] = inputTrades.map((t) => ({
+        ...t,
+        pl: sizedPLMap.get(t) ?? t.pl ?? 0,
+      }));
 
       const calculator = new PortfolioStatsCalculator();
-      const stats = calculator.calculatePortfolioStats(sanitized);
+      // Use the same public portfolio stats pipeline that Block Stats relies on.
+      const stats = calculator.calculatePortfolioStats(sizedTrades, undefined, false);
       const ddFromCalculator = Math.abs(stats.maxDrawdown ?? 0);
-      if (Number.isFinite(ddFromCalculator)) return ddFromCalculator;
 
-      return 0;
+      return Number.isFinite(ddFromCalculator) ? ddFromCalculator : 0;
     },
-    []
+    [kellyFraction, sizingMode]
   );
 
   // Helper to compute per-block summary stats so uploaded logs get their own Net P/L / Trades / Win Rate / Max DD cards.
