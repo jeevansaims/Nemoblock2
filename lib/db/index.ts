@@ -334,55 +334,47 @@ export class TransactionError extends DatabaseError {
 
 // Re-export functions from individual stores
 export {
-  createBlock,
-  deleteBlock,
-  getActiveBlock,
-  getAllBlocks,
-  getBlock,
-  updateBlock,
-  updateBlockStats,
+    createBlock,
+    deleteBlock,
+    getActiveBlock,
+    getAllBlocks,
+    getBlock,
+    updateBlock,
+    updateBlockStats
 } from "./blocks-store";
 export {
-  addDailyLogEntries,
-  deleteDailyLogsByBlock,
-  getDailyLogCountByBlock,
-  getDailyLogsByBlock,
-  updateDailyLogsForBlock,
-} from "./daily-logs-store";
-export {
-  addReportingTrades,
-  deleteReportingTradesByBlock,
-  getReportingStrategiesByBlock,
-  getReportingTradeCountByBlock,
-  getReportingTradesByBlock,
-  updateReportingTradesForBlock,
-} from "./reporting-logs-store";
-export {
-  addTrades,
-  deleteTradesByBlock,
-  getTradeCountByBlock,
-  getTradesByBlock,
-  getTradesByBlockWithOptions,
-  updateTradesForBlock,
-} from "./trades-store";
-export {
-  saveWalkForwardAnalysis,
-  getWalkForwardAnalysis,
-  getWalkForwardAnalysesByBlock,
-  deleteWalkForwardAnalysis,
-  deleteWalkForwardAnalysesByBlock,
-} from "./walk-forward-store";
-export {
-  storeCombinedTradesCache,
-  getCombinedTradesCache,
-  deleteCombinedTradesCache,
-  hasCombinedTradesCache,
-  invalidateBlockCaches,
+    deleteCombinedTradesCache, getCombinedTradesCache, hasCombinedTradesCache,
+    invalidateBlockCaches, storeCombinedTradesCache
 } from "./combined-trades-cache";
 export {
-  storePerformanceSnapshotCache,
-  getPerformanceSnapshotCache,
-  deletePerformanceSnapshotCache,
-  hasPerformanceSnapshotCache,
+    addDailyLogEntries,
+    deleteDailyLogsByBlock,
+    getDailyLogCountByBlock,
+    getDailyLogsByBlock,
+    updateDailyLogsForBlock
+} from "./daily-logs-store";
+export {
+    deletePerformanceSnapshotCache, getPerformanceSnapshotCache, hasPerformanceSnapshotCache, storePerformanceSnapshotCache
 } from "./performance-snapshot-cache";
 export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache";
+export {
+    addReportingTrades,
+    deleteReportingTradesByBlock,
+    getReportingStrategiesByBlock,
+    getReportingTradeCountByBlock,
+    getReportingTradesByBlock,
+    updateReportingTradesForBlock
+} from "./reporting-logs-store";
+export {
+    addTrades,
+    deleteTradesByBlock,
+    getTradeCountByBlock,
+    getTradesByBlock,
+    getTradesByBlockWithOptions,
+    getTradesByDateRange,
+    updateTradesForBlock
+} from "./trades-store";
+export {
+    deleteWalkForwardAnalysesByBlock, deleteWalkForwardAnalysis, getWalkForwardAnalysesByBlock, getWalkForwardAnalysis, saveWalkForwardAnalysis
+} from "./walk-forward-store";
+

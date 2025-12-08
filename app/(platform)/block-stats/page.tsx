@@ -4,17 +4,20 @@ import { MetricCard } from "@/components/metric-card";
 import { MetricSection } from "@/components/metric-section";
 import { MultiSelect } from "@/components/multi-select";
 import { NoActiveBlock } from "@/components/no-active-block";
+import { SizingModeToggle } from "@/components/sizing-mode-toggle";
 import { StrategyBreakdownTable } from "@/components/strategy-breakdown-table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SizingModeToggle } from "@/components/sizing-mode-toggle";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import {
   getBlock,
   getDailyLogsByBlock,
-  getTradesByBlockWithOptions,
   getPerformanceSnapshotCache,
+  getTradesByBlockWithOptions,
+  getTradesByDateRange,
 } from "@/lib/db";
 import {
   calculatePremiumEfficiencyPercent,
@@ -40,8 +43,8 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import type { DateRange } from "react-day-picker";
 
 // Strategy options will be dynamically generated from trades
 
@@ -51,6 +54,7 @@ export default function BlockStatsPage() {
   const [riskFreeRate, setRiskFreeRate] = useState("2");
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
   const [normalizeTo1Lot, setNormalizeTo1Lot] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
   // Data fetching state
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -134,11 +138,13 @@ export default function BlockStatsPage() {
           processedBlock?.analysisConfig?.combineLegGroups ?? false;
 
         // Check for cached snapshot first (for instant load with default settings)
-        // Only use cache if we're using default settings (no filters, default risk-free rate, no normalization)
+        // Only use cache if we're using default settings (no filters, default risk-free rate, no normalization, no date range)
         const isDefaultView =
           selectedStrategies.length === 0 &&
           (parseFloat(riskFreeRate) || 2.0) === 2.0 &&
-          !normalizeTo1Lot;
+          !normalizeTo1Lot &&
+          !dateRange?.from &&
+          !dateRange?.to;
 
         if (isDefaultView) {
           const cachedSnapshot = await getPerformanceSnapshotCache(activeBlock.id);
@@ -160,10 +166,22 @@ export default function BlockStatsPage() {
         }
 
         // Cache miss or filters applied - fetch data normally
-        const [blockTrades, blockDailyLogs] = await Promise.all([
-          getTradesByBlockWithOptions(activeBlock.id, { combineLegGroups }),
-          getDailyLogsByBlock(activeBlock.id),
-        ]);
+        let blockTrades: Trade[];
+        
+        // Use date range filtering if specified
+        if (dateRange?.from && dateRange?.to) {
+          blockTrades = await getTradesByDateRange(
+            activeBlock.id,
+            dateRange.from,
+            dateRange.to
+          );
+        } else {
+          blockTrades = await getTradesByBlockWithOptions(activeBlock.id, {
+            combineLegGroups,
+          });
+        }
+
+        const blockDailyLogs = await getDailyLogsByBlock(activeBlock.id);
 
         setTrades(blockTrades);
         setDailyLogs(blockDailyLogs);
@@ -179,7 +197,7 @@ export default function BlockStatsPage() {
 
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBlock?.id]);
+  }, [activeBlock?.id, dateRange]);
 
   // Calculate metrics when data or risk-free rate changes
   useEffect(() => {
@@ -646,6 +664,10 @@ export default function BlockStatsPage() {
     <div className="space-y-6">
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-2">
+          <Label>Date Range</Label>
+          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="risk-free-rate">Risk-free Rate (%)</Label>
           <Input

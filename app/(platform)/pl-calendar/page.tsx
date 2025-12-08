@@ -4,14 +4,16 @@ import { useEffect, useState } from "react";
 
 import { NoActiveBlock } from "@/components/no-active-block";
 import { PLCalendarPanel } from "@/components/pl-calendar/PLCalendarPanel";
-import { WorkspaceShell } from "@/components/workspace-shell";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
+import type { DateRange } from "react-day-picker";
 
 export default function PlCalendarPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
   const activeBlock = useBlockStore((state) => {
     const activeBlockId = state.activeBlockId;
@@ -56,18 +58,23 @@ export default function PlCalendarPage() {
   }
 
   return (
-    <WorkspaceShell
-      title="P/L Calendar"
-      label="New"
-      description="Visualize daily P/L and drill into trades and legs for each day."
-    >
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">P/L Calendar</h1>
+          <p className="text-muted-foreground">
+            Visualize daily P/L and drill into trades and legs for each day.
+          </p>
+        </div>
+        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+      </div>
       {isLoadingData ? (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
           <p className="text-muted-foreground">Loading trades...</p>
         </div>
       ) : (
-        <PLCalendarPanel trades={trades} />
+        <PLCalendarPanel trades={trades} dateRange={dateRange} />
       )}
-    </WorkspaceShell>
+    </div>
   );
 }

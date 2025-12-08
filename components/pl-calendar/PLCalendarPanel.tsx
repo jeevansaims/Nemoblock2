@@ -34,6 +34,7 @@ import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import { Trade } from "@/lib/models/trade";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
+import type { DateRange } from "react-day-picker";
 
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
@@ -41,8 +42,18 @@ import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
 import { CalendarBlockConfig, YearViewBlock } from "./YearViewBlock";
 
+// Local type extension: drawdownPct is optional in upstream but may be populated by CSV parsers
+type TradeWithOptionalDrawdown = Trade & { drawdownPct?: number };
+
 interface PLCalendarPanelProps {
-  trades: Trade[];
+  trades: TradeWithOptionalDrawdown[];
+  dateRange?: DateRange;
+}
+
+// Helper to check if a date is within the specified range
+function isWithinRange(date: Date, range?: DateRange): boolean {
+  if (!range?.from || !range?.to) return true;
+  return date >= range.from && date <= range.to;
 }
 
 const formatCompactUsd = (value: number) => {
@@ -207,7 +218,7 @@ type MarketRegime =
   | "HIGH_IV"
   | "LOW_IV";
 
-export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
+export function PLCalendarPanel({ trades, dateRange }: PLCalendarPanelProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
@@ -437,11 +448,20 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
   );
 
   const filteredTrades = useMemo(() => {
-    if (selectedStrategies.length === 0) return trades;
-    return trades.filter((t) =>
+    // First filter by date range if specified
+    let result = trades;
+    if (dateRange?.from && dateRange?.to) {
+      result = result.filter((t) => {
+        const d = new Date(t.dateClosed ?? t.dateOpened);
+        return isWithinRange(d, dateRange);
+      });
+    }
+    // Then filter by selected strategies
+    if (selectedStrategies.length === 0) return result;
+    return result.filter((t) =>
       selectedStrategies.includes(t.strategy || "Custom")
     );
-  }, [trades, selectedStrategies]);
+  }, [trades, selectedStrategies, dateRange]);
 
   // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
   useEffect(() => {
