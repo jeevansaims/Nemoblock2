@@ -162,65 +162,49 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     const cols = splitCsvLine(row, delimiter);
     const get = (idx: number) => (idx >= 0 && idx < cols.length ? cols[idx] : "");
 
-    // Construct row object for robust detection (as requested)
+    // Construct row object
     const rowObj: Record<string, string> = {};
     headers.forEach((h, k) => {
         rowObj[h] = cols[k] || "";
     });
 
-    // 1. Log the CSV headers as the parser sees them (User requested debug)
-    if (i === 1 && typeof window !== "undefined") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const win = window as any;
-        if (!win.__loggedHeaders) {
-            win.__loggedHeaders = true;
-            console.log(
-                "OO uploaded log headers (detailed):",
-                Object.keys(rowObj).map((h) => ({
-                    raw: h,
-                    length: h.length,
-                    chars: Array.from(h).map((c) => c.charCodeAt(0)),
-                }))
-            );
-        }
-    }
+    let drawdownPct: number | undefined;
 
-    // 2. Normalize the header and set entry.drawdownPct
-    const normalized: Record<string, string> = {};
-    for (const [rawKey, value] of Object.entries(rowObj)) {
+    // Use User's requested logic:
+    // Iterate entries to find Drawdown key dynamically for this row's data
+    for (const [rawKey, rawVal] of Object.entries(rowObj)) {
         const key = String(rawKey)
             .replace(/^\uFEFF/, "") // strip BOM if present
             .trim()
             .toLowerCase();
-        normalized[key] = String(value ?? "");
-    }
 
-    // Try common drawdown header spellings
-    const rawDd =
-        normalized["drawdown %"] ??
-        normalized["drawdown%"] ??
-        normalized["drawdown pct"] ??
-        normalized["drawdownpct"] ??
-        normalized["drawdown"];
+        if (
+            key === "drawdown %" ||
+            key === "drawdown%" ||
+            key === "drawdown pct" ||
+            key === "drawdownpct" ||
+            key === "drawdown" ||
+            key === "dd %" ||
+            key === "dd"
+        ) {
+            if (rawVal === null || rawVal === undefined || rawVal === "") continue;
 
-    let drawdownPct: number | undefined;
-    if (rawDd !== undefined && rawDd !== "") {
-        const cleaned = rawDd.replace(/[%$,]/g, "");
-        const n = Number(cleaned);
-        if (Number.isFinite(n)) {
-            drawdownPct = n;
+            const cleaned = String(rawVal).replace(/[%$,]/g, "");
+            const n = Number(cleaned);
+            if (Number.isFinite(n)) {
+                drawdownPct = n; // Found it.
+                break; // Stop looking.
+            }
         }
     }
-    
-    // Debug first row's drawdown parsing
+
+    // Debug first row
     if (i === 1) {
-        console.log("[CSV Parser Debug] Row 1 Normalization:", {
-            normalizedKeys: Object.keys(normalized),
-            foundRawDd: rawDd,
-            parsedDrawdownPct: drawdownPct
+        console.log("[CSV Parser] Row 1 Drawdown Scan Result:", {
+            found: drawdownPct,
+            rowKeys: Object.keys(rowObj)
         });
     }
-
 
     const openedOnRaw = get(idxOpenedOn);
     const openedOn = parseDate(openedOnRaw);
@@ -260,6 +244,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
       movement: parseNumber(get(idxMovement)),
       maxProfit: parseNumber(get(idxMaxProfit)),
       maxLoss: parseNumber(get(idxMaxLoss)),
+      // IMPORTANT: set this on the same object the calendar uses for Max DD
       drawdownPct: drawdownPct ?? 0,
     } as Trade;
     
