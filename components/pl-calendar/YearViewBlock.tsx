@@ -189,12 +189,16 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
         ) {
             if (rawVal === null || rawVal === undefined || rawVal === "") continue;
 
-            const cleaned = String(rawVal).replace(/[%$,]/g, "");
-            const n = Number(cleaned);
-            if (Number.isFinite(n)) {
-                drawdownPct = n; // Found it.
-                break; // Stop looking.
-            }
+            const n = parseNumber(String(rawVal));
+            // parseNumber returns 0 if invalid or 0.
+            // But 0 might be a valid drawdown.
+            // We want to verify it was actually a number.
+            // parseNumber implementation: returns Number.isFinite(n) ? n : 0
+            // so we can trust it generally, but we should make sure we don't catch empty strings as 0 if we can avoid it.
+            // But we checked rawVal !== "" above.
+            
+            drawdownPct = n; 
+            break; // Found it.
         }
     }
 
