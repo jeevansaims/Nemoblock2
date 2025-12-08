@@ -53,9 +53,13 @@ interface PLCalendarPanelProps {
 }
 
 // Helper to check if a date is within the specified range
-function isWithinRange(date: Date, range?: DateRange): boolean {
-  if (!range?.from || !range?.to) return true;
-  return date >= range.from && date <= range.to;
+function isWithinRange(
+  date: Date | string | null | undefined,
+  range?: DateRange
+): boolean {
+  if (!range?.from || !range?.to || !date) return true;
+  const d = date instanceof Date ? date : new Date(date);
+  return d >= range.from && d <= range.to;
 }
 
 const formatCompactUsd = (value: number) => {
@@ -221,6 +225,14 @@ type MarketRegime =
   | "LOW_IV";
 
 export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPanelProps) {
+  // DEBUG: Log what we receive
+  console.log(
+    "[PLCalendarPanel] dateRange",
+    dateRange?.from?.toISOString?.() ?? null,
+    dateRange?.to?.toISOString?.() ?? null,
+    "trades:", trades.length
+  );
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
@@ -470,6 +482,14 @@ export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPane
     () =>
       (dailyLogs ?? []).filter((d) => isWithinRange(d.date, dateRange)),
     [dailyLogs, dateRange]
+  );
+
+  // DEBUG: Log filtered results
+  console.log(
+    "[PLCalendarPanel] filteredTrades",
+    filteredTrades.length,
+    "filteredDailyLogs",
+    filteredDailyLogs.length
   );
 
   // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
