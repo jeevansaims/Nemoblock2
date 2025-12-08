@@ -314,6 +314,16 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
     (inputTrades: Trade[]) => {
       if (inputTrades.length === 0) return 0;
 
+      // If trades already carry drawdownPct (e.g., uploaded daily log), respect that directly so
+      // uploaded blocks use the same drawdown series as Block Stats.
+      const drawdownSeries = inputTrades
+        .map((t) => t.drawdownPct)
+        .filter((v): v is number => Number.isFinite(v));
+
+      if (drawdownSeries.length > 0) {
+        return Math.max(...drawdownSeries.map((v) => Math.abs(v)));
+      }
+
       // Apply sizing so DD respects the current sizing mode / Kelly fraction.
       const sizedPLMap = computeSizedPLMap(
         inputTrades,

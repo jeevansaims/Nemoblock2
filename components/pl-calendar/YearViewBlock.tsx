@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
 import { format, parse } from "date-fns";
+import React, { useCallback } from "react";
 
 import { Trade } from "@/lib/models/trade";
 
@@ -107,7 +107,9 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     return -1;
   };
 
-  const idxOpenedOn = findIndex(["Opened On", "Date Opened"]);
+  // Support both Trade Log ("Opened On", "Date Opened") and Daily Log ("Date")
+  const idxOpenedOn = findIndex(["Opened On", "Date Opened", "Date"]);
+  
   const idxOpeningPrice = findIndex(["Opening Price"]);
   const idxLegs = findIndex(["Legs"]);
   const idxPremium = findIndex(["Premium"]);
@@ -115,9 +117,9 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxClosedOn = findIndex(["Closed On", "Date Closed"]);
   const idxAvgClosingCost = findIndex(["Closing Cost", "Avg. Closing Cost"]);
   const idxReasonForClose = findIndex(["Reason for Close", "Reason For Close"]);
-  const idxPL = findIndex(["P/L", "PL", "Net P/L", "Net PL"]);
+  const idxPL = findIndex(["P/L", "PL", "Net P/L", "Net PL", "Daily P/L"]);
   const idxContracts = findIndex(["No. of Contracts", "Contracts"]);
-  const idxFundsAtClose = findIndex(["Funds at Close"]);
+  const idxFundsAtClose = findIndex(["Funds at Close", "Net Liquidity"]);
   const idxMarginReq = findIndex(["Margin Req.", "Margin Req"]);
   const idxStrategy = findIndex(["Strategy"]);
   const idxOpeningFees = findIndex(["Opening Commissions + Fees"]);
@@ -130,7 +132,13 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMovement = findIndex(["Movement"]);
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
-  const idxDrawdownPct = findIndex(["Drawdown %", "Drawdown", "Drawdown Pct", "DrawdownPct"]);
+
+  // More aggressive Drawdown detection
+  let idxDrawdownPct = findIndex(["Drawdown %", "Drawdown", "Drawdown Pct", "DrawdownPct", "DD %", "DD"]);
+  if (idxDrawdownPct === -1) {
+    // Fallback: search for any column containing "drawdown"
+    idxDrawdownPct = normalizedHeader.findIndex(h => h.includes("drawdown"));
+  }
 
   if (idxDrawdownPct === -1 && process.env.NODE_ENV === "development") {
     // Surface header keys in dev so we can quickly see why drawdown is missing.
