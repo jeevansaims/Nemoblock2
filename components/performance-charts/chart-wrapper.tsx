@@ -260,7 +260,7 @@ export function ChartWrapper({
       modeBarButtonsToRemove: [],
       toImageButtonOptions: {
         format: "png" as const,
-        filename: `nemoblocks-${title.toLowerCase().replace(/\s+/g, "-")}`,
+        filename: `tradeblocks-${title.toLowerCase().replace(/\s+/g, "-")}`,
         height: 600,
         width: 1000,
         scale: 2,
