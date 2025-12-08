@@ -93,12 +93,13 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
 
   if (lines.length < 2) return [];
 
-  const headers = splitCsvLine(lines[0]).map((h) => h.trim());
-  // Strip BOM from the first header if present (common in Excel exports)
-  if (headers.length > 0) {
-    headers[0] = headers[0].replace(/^\uFEFF/, "");
-  }
-  const normalizedHeader = headers.map((h) => h.toLowerCase());
+  const headers = splitCsvLine(lines[0]);
+  // Normalize headers: lowercase, trim, remove BOM
+  const normalizedHeader = headers.map((h) => h.replace(/^\uFEFF/, "").trim().toLowerCase());
+
+  // Debug: log normalized headers to see exactly what we have
+  console.log("[CSV Parser] Normalized Headers:", normalizedHeader);
+
   const findIndex = (candidates: string[]) => {
     for (const label of candidates) {
       const idx = normalizedHeader.indexOf(label.toLowerCase());
@@ -133,28 +134,24 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
 
-  // More aggressive Drawdown detection
-  let idxDrawdownPct = findIndex(["Drawdown %", "Drawdown", "Drawdown Pct", "DrawdownPct", "DD %", "DD"]);
+  // Robust Drawdown detection as requested
+  // Try exact matches first
+  let idxDrawdownPct = findIndex([
+    "drawdown %",
+    "drawdown%",
+    "drawdown pct",
+    "drawdownpct",
+    "drawdown",
+    "dd %",
+    "dd"
+  ]);
+
+  // Fallback: search for any column containing "drawdown" if not found
   if (idxDrawdownPct === -1) {
-    // Fallback: search for any column containing "drawdown"
     idxDrawdownPct = normalizedHeader.findIndex(h => h.includes("drawdown"));
   }
 
-  // Debug logging for uploaded log parsing
-  if (process.env.NODE_ENV === "development") {
-    console.group("parseOptionOmegaCsv Debug");
-    console.log("Raw Headers:", headers);
-    console.log("Normalized Headers:", normalizedHeader);
-    console.log("Detected Drawdown Index:", idxDrawdownPct);
-    if (idxDrawdownPct !== -1) {
-        console.log("Drawdown Header found:", headers[idxDrawdownPct]);
-    }
-    console.groupEnd();
-  } else {
-    // Also log in production for the user to see in their console since they requested it
-    console.log("[CSV Parser] Headers:", headers);
-    console.log("[CSV Parser] Drawdown Index:", idxDrawdownPct);
-  }
+  console.log("[CSV Parser] Detected Drawdown Index:", idxDrawdownPct);
 
   const trades: Trade[] = [];
 
@@ -170,13 +167,17 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     const closedOn = parseDate(closedOnRaw);
 
     // Skip if we couldn't parse any meaningful date; avoids 1969/1970 buckets.
+    // Allow if only matching "Date" (Daily Log style) where closedOn might be empty
     if (!openedOn && !closedOn) continue;
 
     const strategy = get(idxStrategy) || "Unknown";
     
-    // Debug first few rows for Drawdown
-    if (i <= 3) {
-        console.log(`[CSV Parser] Row ${i} Raw Drawdown:`, get(idxDrawdownPct), "Parsed:", parseNumber(get(idxDrawdownPct)));
+    // Explicitly parse drawdown with logging for first row
+    const rawDd = get(idxDrawdownPct);
+    const drawdownPct = parseNumber(rawDd);
+    
+    if (i === 1) {
+        console.log("[CSV Parser] Row 1 Raw Drawdown:", rawDd, "Parsed:", drawdownPct);
     }
 
 
