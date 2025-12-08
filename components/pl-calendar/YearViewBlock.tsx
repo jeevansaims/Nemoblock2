@@ -143,7 +143,7 @@ function parseOptionOmegaCsv(csvText: string): { trades: Trade[]; detectedMaxDra
   const idxPL = findIndex(["P/L", "PL", "Net P/L", "Net PL", "Daily P/L"]);
   const idxContracts = findIndex(["No. of Contracts", "Contracts"]);
   const idxFundsAtClose = findIndex(["Funds at Close", "Net Liquidity"]);
-  const idxMarginReq = findIndex(["Margin Req.", "Margin Req"]);
+  const idxMarginReq = findIndex(["Margin Req.", "Margin Req", "Initial Margin", "Init Margin", "Margin"]);
   const idxStrategy = findIndex(["Strategy"]);
   const idxOpeningFees = findIndex(["Opening Commissions + Fees"]);
   const idxClosingFees = findIndex(["Closing Commissions + Fees"]);
@@ -238,6 +238,20 @@ function parseOptionOmegaCsv(csvText: string): { trades: Trade[]; detectedMaxDra
     if (!openedOn && !closedOn) continue;
 
     const strategy = get(idxStrategy) || "Unknown";
+    
+    let marginReqVal = parseNumber(get(idxMarginReq));
+    const fundsAtCloseVal = parseNumber(get(idxFundsAtClose));
+
+    // Heuristic Check: If Margin Req is suspiciously large and close to Funds At Close
+    // (likely detecting Account Balance as Margin), then ignore it to avoid skewing ROM.
+    if (
+        marginReqVal > 1_000_000 && 
+        fundsAtCloseVal > 1_000_000 && 
+        Math.abs(marginReqVal - fundsAtCloseVal) / (fundsAtCloseVal || 1) < 0.2
+    ) {
+        // likely account balance mapped to margin, or margin column contains bal
+        marginReqVal = 0;
+    }
 
     const trade: Trade = {
       dateOpened: openedOn ?? new Date("1970-01-01"),
@@ -253,8 +267,8 @@ function parseOptionOmegaCsv(csvText: string): { trades: Trade[]; detectedMaxDra
       reasonForClose: get(idxReasonForClose) || undefined,
       pl: parseNumber(get(idxPL)),
       numContracts: parseNumber(get(idxContracts)),
-      fundsAtClose: parseNumber(get(idxFundsAtClose)),
-      marginReq: parseNumber(get(idxMarginReq)),
+      fundsAtClose: fundsAtCloseVal,
+      marginReq: marginReqVal,
       strategy,
       openingCommissionsFees: parseNumber(get(idxOpeningFees)),
       closingCommissionsFees: parseNumber(get(idxClosingFees)),
