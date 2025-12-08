@@ -380,7 +380,14 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
       let totalPL = 0;
       let wins = 0;
 
-      // Sort trades for correct equity curve simulation (legacy logic)
+      // 1. Calculate explicit Max Drawdown from populated drawdownPct (if available)
+      // This corresponds to the user's request to use the column data directly if present.
+      const explicitDdValues = tradesForSummary
+        .map((t) => t.drawdownPct)
+        .filter((v): v is number => Number.isFinite(v));
+      const explicitMaxDd = explicitDdValues.length > 0 ? Math.max(...explicitDdValues.map(Math.abs)) : 0;
+
+      // 2. Legacy Logic (99268ce): Calculate P/L curve-based Max DD as fallback/safety.
       const tradesSorted = [...tradesForSummary].sort((a, b) => {
         const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
         const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
@@ -390,7 +397,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         );
       });
 
-      // Seed equity using funds baseline when available so normalized sizing still references real capital.
+      // Seed equity using funds baseline.
       const first = tradesSorted[0];
       const baseFromFunds =
         typeof first.fundsAtClose === "number" && typeof first.pl === "number"
@@ -401,7 +408,7 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
           ? baseFromFunds
           : 100_000;
       let peak = equity;
-      let maxDd = 0;
+      let legacyMaxDdVar = 0;
 
       tradesSorted.forEach((t) => {
         const sizedPL = sizedPLMap.get(t) ?? t.pl ?? 0;
@@ -412,13 +419,17 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         peak = Math.max(peak, equity);
         if (peak > 0) {
           const dd = (peak - equity) / peak;
-          if (dd > maxDd) maxDd = dd;
+          if (dd > legacyMaxDdVar) legacyMaxDdVar = dd;
         }
       });
 
       const tradeCount = tradesForSummary.length;
       const winRate = tradeCount > 0 ? Math.round((wins / tradeCount) * 100) : 0;
-      const maxDrawdownPct = maxDd * 100;
+      
+      // Hybrid Decision:
+      // If we have explicit positive drawdown data from the CSV, use it (exact).
+      // Otherwise, use the legacy curve calculation (approximate but robust).
+      const maxDrawdownPct = explicitMaxDd > 0 ? explicitMaxDd : (legacyMaxDdVar * 100);
 
       return { totalPL, tradeCount, winRate, maxDrawdownPct };
     },

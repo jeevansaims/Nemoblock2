@@ -348,10 +348,9 @@ export function YearViewBlock({
   // Helper to inspect parsed drawdown percentages from uploaded logs
   const parsedMaxAbsDrawdown = React.useMemo(() => {
     // 1. If we found an explicit Drawdown % column in the CSV, use that exact value.
-    // TEMPORARILY DISABLED per user instruction to verify legacy fallback first.
-    // if (!isPrimary && uploadedMaxDrawdown !== null) {
-    //    return uploadedMaxDrawdown;
-    // }
+    if (!isPrimary && uploadedMaxDrawdown !== null) {
+        return uploadedMaxDrawdown;
+    }
 
     // 2. Fallback to calculating it from trades using legacy 99268ce logic 
     // (P/L curve based on fundsAtClose or default equity)
