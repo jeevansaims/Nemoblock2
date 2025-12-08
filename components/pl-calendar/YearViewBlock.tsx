@@ -168,32 +168,57 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
         rowObj[h] = cols[k] || "";
     });
 
-    if (i === 1) {
-        console.log("[CSV Parser] Row 1 Keys:", Object.keys(rowObj));
+    // 1. Log the CSV headers as the parser sees them (User requested debug)
+    if (i === 1 && typeof window !== "undefined") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = window as any;
+        if (!win.__loggedHeaders) {
+            win.__loggedHeaders = true;
+            console.log(
+                "OO uploaded log headers (detailed):",
+                Object.keys(rowObj).map((h) => ({
+                    raw: h,
+                    length: h.length,
+                    chars: Array.from(h).map((c) => c.charCodeAt(0)),
+                }))
+            );
+        }
     }
 
-    // Robust Drawdown detection using object keys
-    let drawdownPct: number | undefined;
-    
-    // 1. Normalize keys and look for "drawdown"
-    const ddKey = Object.keys(rowObj).find(k => {
-        const norm = k.replace(/^\uFEFF/, "").trim().toLowerCase();
-        return ["drawdown %", "drawdown%", "drawdown pct", "drawdownpct", "drawdown", "dd %", "dd"].includes(norm);
-    });
-    
-    // 2. Fallback to includes check
-    const finalDdKey = ddKey ?? Object.keys(rowObj).find(k => k.toLowerCase().includes("drawdown"));
+    // 2. Normalize the header and set entry.drawdownPct
+    const normalized: Record<string, string> = {};
+    for (const [rawKey, value] of Object.entries(rowObj)) {
+        const key = String(rawKey)
+            .replace(/^\uFEFF/, "") // strip BOM if present
+            .trim()
+            .toLowerCase();
+        normalized[key] = String(value ?? "");
+    }
 
-    if (finalDdKey) {
-        const rawDd = rowObj[finalDdKey];
-        if (rawDd !== undefined && rawDd !== null && rawDd !== "") {
-             drawdownPct = parseNumber(rawDd);
-             if (i === 1) {
-                 console.log("[CSV Parser] Row 1 Found Drawdown Key:", finalDdKey, "Raw:", rawDd, "Parsed:", drawdownPct);
-             }
+    // Try common drawdown header spellings
+    const rawDd =
+        normalized["drawdown %"] ??
+        normalized["drawdown%"] ??
+        normalized["drawdown pct"] ??
+        normalized["drawdownpct"] ??
+        normalized["drawdown"];
+
+    let drawdownPct: number | undefined;
+    if (rawDd !== undefined && rawDd !== "") {
+        const cleaned = rawDd.replace(/[%$,]/g, "");
+        const n = Number(cleaned);
+        if (Number.isFinite(n)) {
+            drawdownPct = n;
         }
-    } else if (i === 1) {
-        console.log("[CSV Parser] Row 1 NO Drawdown Key Found in:", Object.keys(rowObj));
+    }
+    
+    // Debug first row's drawdown parsing
+    if (i === 1) {
+        console.log("[CSV Parser Debug] Row 1 Normalization:", {
+            normalizedKeys: Object.keys(normalized),
+            foundRawDd: rawDd,
+            parsedDrawdownPct: drawdownPct
+        });
     }
 
 

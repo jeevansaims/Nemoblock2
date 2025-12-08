@@ -6,29 +6,29 @@ import { endOfWeek, format, getISOWeek, getISOWeekYear, getMonth, getYear, parse
 import { Check, ChevronDown, Download, Filter, Table as TableIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+    Command,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import { Trade } from "@/lib/models/trade";
@@ -37,9 +37,9 @@ import { getTradingDayKey } from "@/lib/utils/trading-day";
 
 import { DailyDetailModal, DaySummary } from "./DayDetailModal";
 import { MonthlyPLCalendar } from "./MonthlyPLCalendar";
-import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
 import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
-import { YearViewBlock, CalendarBlockConfig } from "./YearViewBlock";
+import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
+import { CalendarBlockConfig, YearViewBlock } from "./YearViewBlock";
 
 interface PLCalendarPanelProps {
   trades: Trade[];
@@ -321,6 +321,12 @@ export function PLCalendarPanel({ trades }: PLCalendarPanelProps) {
         .filter((v): v is number => Number.isFinite(v));
 
       if (drawdownSeries.length > 0) {
+        // Sanity Check: log drawdown values for the block being processed
+        // This is to verify if the parser is actually populating drawdownPct
+        if (process.env.NODE_ENV === "development") {
+            const sample = drawdownSeries.slice(0, 5);
+            console.log("Drawdown Series Check (first 5):", sample, "Total entries:", drawdownSeries.length);
+        }
         return Math.max(...drawdownSeries.map((v) => Math.abs(v)));
       }
 
