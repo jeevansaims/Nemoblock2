@@ -226,12 +226,7 @@ type MarketRegime =
 
 export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPanelProps) {
   // DEBUG: Log what we receive
-  console.log(
-    "[PLCalendarPanel] dateRange",
-    dateRange?.from?.toISOString?.() ?? null,
-    dateRange?.to?.toISOString?.() ?? null,
-    "trades:", trades.length
-  );
+
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "year">("month");
@@ -485,12 +480,7 @@ export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPane
   );
 
   // DEBUG: Log filtered results
-  console.log(
-    "[PLCalendarPanel] filteredTrades",
-    filteredTrades.length,
-    "filteredDailyLogs",
-    filteredDailyLogs.length
-  );
+
 
   // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
   useEffect(() => {
@@ -1496,12 +1486,7 @@ function YearlyPLOutput({
   onMonthClick,
 }: YearlyPLOutputProps) {
   // DEBUG: Log what YearlyPLOutput receives
-  console.log(
-    "[YearlyPLOutput] received trades:",
-    trades.length,
-    "selectedStrategies:",
-    selectedStrategies
-  );
+
 
   const filtered = useMemo(() => {
     if (selectedStrategies.length === 0) return trades;

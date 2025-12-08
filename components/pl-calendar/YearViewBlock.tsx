@@ -389,19 +389,13 @@ export function YearViewBlock({
 
       // 2. Apply date range filter (parent filters baseTrades, but we must filter our own)
       if (!dateRange?.from || !dateRange?.to) {
-        console.log(`[YearViewBlock ${id || 'no-id'}] No date range, returning raw:`, rawTrades.length);
         return rawTrades;
       }
 
       const filtered = rawTrades.filter(t => isWithinRange(t.dateClosed ?? t.dateOpened, dateRange));
-      console.log(`[YearViewBlock ${id || 'no-id'}] Filtered:`, {
-        raw: rawTrades.length,
-        filtered: filtered.length,
-        range: dateRange
-      });
       return filtered;
     },
-    [baseTrades, isPrimary, uploadedTrades, trades, dateRange, isWithinRange, id]
+    [baseTrades, isPrimary, uploadedTrades, trades, dateRange, isWithinRange]
   );
   const hasData = isPrimary || (effectiveTrades && effectiveTrades.length > 0);
 
@@ -510,7 +504,7 @@ export function YearViewBlock({
           </span>
           {!isPrimary && parsedMaxAbsDrawdown !== null && (
             <span className="text-[10px] text-slate-500">
-              Parsed max |DD|: {parsedMaxAbsDrawdown.toFixed(2)}%
+
             </span>
           )}
           {!isPrimary && (
