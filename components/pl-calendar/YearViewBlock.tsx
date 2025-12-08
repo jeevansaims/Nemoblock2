@@ -282,7 +282,49 @@ function parseOptionOmegaCsv(csvText: string): { trades: Trade[]; detectedMaxDra
   return { trades, detectedMaxDrawdown };
 }
 
+// Restoration of 99268ce "legacy" logic for Max Drawdown
+function computeLegacyMaxDrawdown(trades: Trade[]): number {
+  if (!trades || trades.length === 0) return 0;
+  
+  // Sort by date/time
+  const tradesSorted = [...trades].sort((a, b) => {
+    const da = new Date(a.dateClosed ?? a.dateOpened).getTime();
+    const db = new Date(b.dateClosed ?? b.dateOpened).getTime();
+    if (da !== db) return da - db;
+    return (a.timeClosed ?? a.timeOpened ?? "").localeCompare(
+      b.timeClosed ?? b.timeOpened ?? ""
+    );
+  });
 
+  // Seed equity using funds baseline.
+  // This logic matches 99268ce exactly.
+  const first = tradesSorted[0];
+  const baseFromFunds =
+    typeof first.fundsAtClose === "number" && typeof first.pl === "number"
+      ? first.fundsAtClose - first.pl
+      : undefined;
+  
+  let equity =
+    typeof baseFromFunds === "number" && baseFromFunds > 0
+      ? baseFromFunds
+      : 100_000;
+  
+  let peak = equity;
+  let maxDd = 0;
+
+  tradesSorted.forEach((t) => {
+    // For uploaded logs fallback, we assume "Actual" sizing (just PL)
+    const sizedPL = t.pl; 
+    equity += sizedPL;
+    peak = Math.max(peak, equity);
+    if (peak > 0) {
+      const dd = (peak - equity) / peak;
+      if (dd > maxDd) maxDd = dd;
+    }
+  });
+
+  return maxDd * 100; // Return as percentage (0-100)
+}
 
 
 export function YearViewBlock({
@@ -310,12 +352,10 @@ export function YearViewBlock({
         return uploadedMaxDrawdown;
     }
 
-    // 2. Fallback to calculating it from trades if no column was found (legacy logic)
-    const vals = effectiveTrades
-      .map((t) => t.drawdownPct)
-      .filter((v): v is number => Number.isFinite(v));
-    if (vals.length === 0) return 0;
-    return Math.max(...vals.map((v) => Math.abs(v)));
+    // 2. Fallback to calculating it from trades using legacy 99268ce logic 
+    // (P/L curve based on fundsAtClose or default equity)
+    if (effectiveTrades.length === 0) return 0;
+    return computeLegacyMaxDrawdown(effectiveTrades);
   }, [effectiveTrades, isPrimary, uploadedMaxDrawdown]);
 
   const handleExport = useCallback(() => {
