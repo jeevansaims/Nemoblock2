@@ -1,5 +1,6 @@
 import { format, parse } from "date-fns";
 import React, { useCallback } from "react";
+import { DateRange } from "react-day-picker";
 
 import { Trade } from "@/lib/models/trade";
 
@@ -13,6 +14,7 @@ export type CalendarBlockConfig = {
 interface YearViewBlockProps {
   block: CalendarBlockConfig;
   baseTrades: Trade[];
+  dateRange?: DateRange;
   onUpdateTrades: (tradesForBlock: Trade[], name?: string) => void;
   onClose: () => void;
   renderContent: (trades: Trade[]) => React.ReactNode;
@@ -359,26 +361,47 @@ export function YearViewBlock({
   onUpdateTrades,
   onClose,
   renderContent,
+  dateRange, // Added dateRange to destructuring
 }: YearViewBlockProps) {
-  const { isPrimary, trades, name } = block;
+  const { id, isPrimary, name, trades } = block; // Restored id for logging
   const [uploadedTrades, setUploadedTrades] = React.useState<Trade[]>([]);
   // Store the explicit Max DD found in CSV, if any
   const [uploadedMaxDrawdown, setUploadedMaxDrawdown] = React.useState<number | null>(null);
 
-  // CRITICAL: Always use baseTrades because it's already filtered by dateRange in PLCalendarPanel.
-  // For primary block: baseTrades = filteredTrades from active block
-  // For uploaded blocks: baseTrades = filteredTrades (same date range applied)  
+  // Helper to check if a date is within the specified range
+  const isWithinRange = React.useCallback((date: Date | string | number, range?: DateRange) => {
+    if (!range?.from || !range?.to || !date) return true;
+    const d = date instanceof Date ? date : new Date(date);
+    return d >= range.from && d <= range.to;
+  }, []);
+
   const effectiveTrades = React.useMemo(
     () => {
-      // If this is an uploaded block and has its own trades, use those ONLY if user uploaded new data
-      // Otherwise, always use baseTrades (which is date-filtered in parent)
-      if (!isPrimary && uploadedTrades.length > 0) {
-        return uploadedTrades;  // User just uploaded - show their upload
+      // Primary block: always use baseTrades (passed from parent, already filtered)
+      if (isPrimary) {
+        return baseTrades;
       }
-      // Default: use base trades (filtered by parent's dateRange)
-      return baseTrades;
+
+      // Uploaded/Secondary block:
+      // 1. Determine raw source (uploaded > block.trades > empty)
+      // CRITICAL FIX: Do NOT fallback to baseTrades, or else it duplicates the active block!
+      const rawTrades = uploadedTrades.length > 0 ? uploadedTrades : (trades ?? []);
+
+      // 2. Apply date range filter (parent filters baseTrades, but we must filter our own)
+      if (!dateRange?.from || !dateRange?.to) {
+        console.log(`[YearViewBlock ${id || 'no-id'}] No date range, returning raw:`, rawTrades.length);
+        return rawTrades;
+      }
+
+      const filtered = rawTrades.filter(t => isWithinRange(t.dateClosed ?? t.dateOpened, dateRange));
+      console.log(`[YearViewBlock ${id || 'no-id'}] Filtered:`, {
+        raw: rawTrades.length,
+        filtered: filtered.length,
+        range: dateRange
+      });
+      return filtered;
     },
-    [baseTrades, isPrimary, uploadedTrades]
+    [baseTrades, isPrimary, uploadedTrades, trades, dateRange, isWithinRange, id]
   );
   const hasData = isPrimary || (effectiveTrades && effectiveTrades.length > 0);
 

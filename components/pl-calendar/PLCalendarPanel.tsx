@@ -1268,6 +1268,7 @@ export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPane
                     key={block.id}
                     block={block}
                     baseTrades={filteredTrades}
+                    dateRange={dateRange}
                     onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
                     onClose={() => removeYearBlock(block.id)}
                     renderContent={(blockTrades) => (
