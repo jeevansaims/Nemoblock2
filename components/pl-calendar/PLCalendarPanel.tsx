@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
+import { DailyLogEntry } from "@/lib/models/daily-log";
 import { Trade } from "@/lib/models/trade";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
@@ -47,6 +48,7 @@ type TradeWithOptionalDrawdown = Trade & { drawdownPct?: number };
 
 interface PLCalendarPanelProps {
   trades: TradeWithOptionalDrawdown[];
+  dailyLogs?: DailyLogEntry[];
   dateRange?: DateRange;
 }
 
@@ -218,7 +220,7 @@ type MarketRegime =
   | "HIGH_IV"
   | "LOW_IV";
 
-export function PLCalendarPanel({ trades, dateRange }: PLCalendarPanelProps) {
+export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPanelProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
@@ -447,6 +449,7 @@ export function PLCalendarPanel({ trades, dateRange }: PLCalendarPanelProps) {
     [selectedStrategies, sizingMode, kellyFraction]
   );
 
+  // Filter trades and daily logs by date range, then by selected strategies
   const filteredTrades = useMemo(() => {
     // First filter by date range if specified
     let result = trades;
@@ -462,6 +465,12 @@ export function PLCalendarPanel({ trades, dateRange }: PLCalendarPanelProps) {
       selectedStrategies.includes(t.strategy || "Custom")
     );
   }, [trades, selectedStrategies, dateRange]);
+
+  const filteredDailyLogs = useMemo(
+    () =>
+      (dailyLogs ?? []).filter((d) => isWithinRange(d.date, dateRange)),
+    [dailyLogs, dateRange]
+  );
 
   // Debug helper: compare active vs first uploaded block trades to catch ordering/field mismatches that affect Max DD.
   useEffect(() => {
@@ -1238,7 +1247,7 @@ export function PLCalendarPanel({ trades, dateRange }: PLCalendarPanelProps) {
                   <YearViewBlock
                     key={block.id}
                     block={block}
-                    baseTrades={trades}
+                    baseTrades={filteredTrades}
                     onUpdateTrades={(newTrades, name) => updateYearBlockTrades(block.id, newTrades, name)}
                     onClose={() => removeYearBlock(block.id)}
                     renderContent={(blockTrades) => (
