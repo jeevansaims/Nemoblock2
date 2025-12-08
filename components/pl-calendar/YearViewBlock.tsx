@@ -140,10 +140,20 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     idxDrawdownPct = normalizedHeader.findIndex(h => h.includes("drawdown"));
   }
 
-  if (idxDrawdownPct === -1 && process.env.NODE_ENV === "development") {
-    // Surface header keys in dev so we can quickly see why drawdown is missing.
-    // This avoids silent failures that produce 0% parsed drawdown.
-    console.warn("Option Omega CSV: no drawdown column detected. Headers=", headers);
+  // Debug logging for uploaded log parsing
+  if (process.env.NODE_ENV === "development") {
+    console.group("parseOptionOmegaCsv Debug");
+    console.log("Raw Headers:", headers);
+    console.log("Normalized Headers:", normalizedHeader);
+    console.log("Detected Drawdown Index:", idxDrawdownPct);
+    if (idxDrawdownPct !== -1) {
+        console.log("Drawdown Header found:", headers[idxDrawdownPct]);
+    }
+    console.groupEnd();
+  } else {
+    // Also log in production for the user to see in their console since they requested it
+    console.log("[CSV Parser] Headers:", headers);
+    console.log("[CSV Parser] Drawdown Index:", idxDrawdownPct);
   }
 
   const trades: Trade[] = [];
@@ -163,6 +173,12 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     if (!openedOn && !closedOn) continue;
 
     const strategy = get(idxStrategy) || "Unknown";
+    
+    // Debug first few rows for Drawdown
+    if (i <= 3) {
+        console.log(`[CSV Parser] Row ${i} Raw Drawdown:`, get(idxDrawdownPct), "Parsed:", parseNumber(get(idxDrawdownPct)));
+    }
+
 
     const trade: Trade = {
       dateOpened: openedOn ?? new Date("1970-01-01"),
