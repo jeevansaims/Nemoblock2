@@ -1494,6 +1494,14 @@ function YearlyPLOutput({
   heatmapMetric,
   onMonthClick,
 }: YearlyPLOutputProps) {
+  // DEBUG: Log what YearlyPLOutput receives
+  console.log(
+    "[YearlyPLOutput] received trades:",
+    trades.length,
+    "selectedStrategies:",
+    selectedStrategies
+  );
+
   const filtered = useMemo(() => {
     if (selectedStrategies.length === 0) return trades;
     return trades.filter((t) => selectedStrategies.includes(t.strategy || "Custom"));
