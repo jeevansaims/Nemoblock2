@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
 import {
   getBlock,
@@ -28,12 +33,14 @@ import { PortfolioStats, StrategyStats } from "@/lib/models/portfolio-stats";
 import { Trade } from "@/lib/models/trade";
 import { buildPerformanceSnapshot } from "@/lib/services/performance-snapshot";
 import { useBlockStore } from "@/lib/stores/block-store";
+import { cn } from "@/lib/utils";
 import {
   downloadCsv,
   downloadJson,
   generateExportFilename,
   toCsvRow,
 } from "@/lib/utils/export-helpers";
+import { format } from "date-fns";
 import {
   AlertTriangle,
   BarChart3,
@@ -666,7 +673,34 @@ export default function BlockStatsPage() {
       <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-2">
           <Label>Date Range</Label>
-          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[300px] justify-start text-left font-normal",
+                  !dateRange && "text-muted-foreground"
+                )}
+              >
+                <Calendar className="mr-2 h-4 w-4" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "LLL dd, y")} -{" "}
+                      {format(dateRange.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(dateRange.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>All time</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+            </PopoverContent>
+          </Popover>
         </div>
         <div className="space-y-2">
           <Label htmlFor="risk-free-rate">Risk-free Rate (%)</Label>
