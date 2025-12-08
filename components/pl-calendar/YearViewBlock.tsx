@@ -31,7 +31,7 @@ function parseNumber(raw: string | undefined): number {
 }
 
 // Basic CSV split that respects quoted commas.
-function splitCsvLine(line: string): string[] {
+function splitCsvLine(line: string, delimiter: string = ","): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -45,7 +45,7 @@ function splitCsvLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (char === "," && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       result.push(current);
       current = "";
     } else {
@@ -54,6 +54,20 @@ function splitCsvLine(line: string): string[] {
   }
   result.push(current);
   return result.map((c) => c.trim());
+}
+
+function detectDelimiter(line: string): string {
+    const candidates = [",", ";", "\t", "|"];
+    let best = ",";
+    let maxCount = 0;
+    for (const d of candidates) {
+        const count = line.split(d).length;
+        if (count > maxCount) {
+            maxCount = count;
+            best = d;
+        }
+    }
+    return best;
 }
 
 function parseDate(raw: string | undefined): Date | undefined {
@@ -86,14 +100,19 @@ function parseDate(raw: string | undefined): Date | undefined {
  * Tolerant: missing fields fall back to safe defaults so we can satisfy Trade.
  */
 function parseOptionOmegaCsv(csvText: string): Trade[] {
+  // 1. Universal line splitting
   const lines = csvText
-    .split(/\r?\n/)
+    .split(/\r\n|\n|\r/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
   if (lines.length < 2) return [];
 
-  const headers = splitCsvLine(lines[0]);
+  // 2. Auto-detect delimiter
+  const delimiter = detectDelimiter(lines[0]);
+  console.log("[CSV Parser] Detected Delimiter:", JSON.stringify(delimiter));
+
+  const headers = splitCsvLine(lines[0], delimiter);
   // Normalize headers: lowercase, trim, remove BOM
   const normalizedHeader = headers.map((h) => h.replace(/^\uFEFF/, "").trim().toLowerCase());
 
@@ -140,7 +159,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i];
     if (!row) continue;
-    const cols = splitCsvLine(row);
+    const cols = splitCsvLine(row, delimiter);
     const get = (idx: number) => (idx >= 0 && idx < cols.length ? cols[idx] : "");
 
     // Construct row object for robust detection (as requested)
