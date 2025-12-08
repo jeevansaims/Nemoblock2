@@ -327,6 +327,32 @@ function computeLegacyMaxDrawdown(trades: Trade[]): number {
 }
 
 
+// 2. Different algorithm matching Option Omega's likely equity-based approach
+function maxDrawdownFromEquity(equity: number[]): number {
+  if (!equity.length) return 0;
+
+  let peak = -Infinity;
+  let maxDd = 0;
+
+  for (const value of equity) {
+    if (!Number.isFinite(value)) continue;
+
+    if (value > peak) {
+      peak = value;
+    }
+
+    if (peak > 0) {
+      // Drawdown is percentage drop from peak
+      const dd = (value / peak - 1) * 100;
+      if (dd < maxDd) {
+        maxDd = dd;
+      }
+    }
+  }
+
+  return Math.abs(maxDd);
+}
+
 export function YearViewBlock({
   block,
   baseTrades,
@@ -347,13 +373,23 @@ export function YearViewBlock({
 
   // Helper to inspect parsed drawdown percentages from uploaded logs
   const parsedMaxAbsDrawdown = React.useMemo(() => {
-    // 1. If we found an explicit Drawdown % column in the CSV, use that exact value.
+    // 1. New Strategy: Compute Max DD from the "Net Liquidity" / "Funds at Close" series specifically.
+    // This is likely the "truth" series Option Omega uses.
+    const fundsSeries = effectiveTrades
+        .map(t => t.fundsAtClose)
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v !== 0);
+    
+    // We need a decent number of data points to trust this series (e.g. > 50% of trades have funds recorded)
+    if (fundsSeries.length > 0 && fundsSeries.length >= effectiveTrades.length * 0.5) {
+        return maxDrawdownFromEquity(fundsSeries);
+    }
+
+    // 2. Fallback: If "Drawdown %" column was explicitly found, use that.
     if (!isPrimary && uploadedMaxDrawdown !== null) {
         return uploadedMaxDrawdown;
     }
 
-    // 2. Fallback to calculating it from trades using legacy 99268ce logic 
-    // (P/L curve based on fundsAtClose or default equity)
+    // 3. Last Resort: Use legacy 99268ce logic (P/L curve simulation)
     if (effectiveTrades.length === 0) return 0;
     return computeLegacyMaxDrawdown(effectiveTrades);
   }, [effectiveTrades, isPrimary, uploadedMaxDrawdown]);
