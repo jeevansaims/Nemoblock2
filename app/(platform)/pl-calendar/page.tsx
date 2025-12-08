@@ -2,13 +2,24 @@
 
 import { useEffect, useState } from "react";
 
+import { format } from "date-fns";
+import { CalendarIcon } from "lucide-react";
+import type { DateRange } from "react-day-picker";
+
 import { NoActiveBlock } from "@/components/no-active-block";
 import { PLCalendarPanel } from "@/components/pl-calendar/PLCalendarPanel";
+import { Button } from "@/components/ui/button";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Label } from "@/components/ui/label";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 import { getTradesByBlockWithOptions } from "@/lib/db";
 import { Trade } from "@/lib/models/trade";
 import { useBlockStore } from "@/lib/stores/block-store";
-import type { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
 
 export default function PlCalendarPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -66,7 +77,37 @@ export default function PlCalendarPage() {
             Visualize daily P/L and drill into trades and legs for each day.
           </p>
         </div>
-        <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+        <div className="space-y-2">
+          <Label>Date Range</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[260px] justify-start text-left font-normal",
+                  !dateRange && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "LLL dd, y")} -{" "}
+                      {format(dateRange.to, "LLL dd, y")}
+                    </>
+                  ) : (
+                    format(dateRange.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>All time</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
       {isLoadingData ? (
         <div className="flex h-[400px] items-center justify-center rounded-lg border border-dashed">
