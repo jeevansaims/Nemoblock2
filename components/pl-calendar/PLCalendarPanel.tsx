@@ -473,11 +473,7 @@ export function PLCalendarPanel({ trades, dailyLogs, dateRange }: PLCalendarPane
     );
   }, [trades, selectedStrategies, dateRange]);
 
-  const filteredDailyLogs = useMemo(
-    () =>
-      (dailyLogs ?? []).filter((d) => isWithinRange(d.date, dateRange)),
-    [dailyLogs, dateRange]
-  );
+
 
   // DEBUG: Log filtered results
 

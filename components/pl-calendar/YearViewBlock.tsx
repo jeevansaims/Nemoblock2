@@ -363,7 +363,7 @@ export function YearViewBlock({
   renderContent,
   dateRange, // Added dateRange to destructuring
 }: YearViewBlockProps) {
-  const { id, isPrimary, name, trades } = block; // Restored id for logging
+  const { isPrimary, name, trades } = block; // Restored id for logging
   const [uploadedTrades, setUploadedTrades] = React.useState<Trade[]>([]);
   // Store the explicit Max DD found in CSV, if any
   const [uploadedMaxDrawdown, setUploadedMaxDrawdown] = React.useState<number | null>(null);
