@@ -365,9 +365,20 @@ export function YearViewBlock({
   // Store the explicit Max DD found in CSV, if any
   const [uploadedMaxDrawdown, setUploadedMaxDrawdown] = React.useState<number | null>(null);
 
+  // CRITICAL: Always use baseTrades because it's already filtered by dateRange in PLCalendarPanel.
+  // For primary block: baseTrades = filteredTrades from active block
+  // For uploaded blocks: baseTrades = filteredTrades (same date range applied)  
   const effectiveTrades = React.useMemo(
-    () => (isPrimary ? baseTrades : (uploadedTrades.length > 0 ? uploadedTrades : trades ?? [])),
-    [baseTrades, isPrimary, uploadedTrades, trades]
+    () => {
+      // If this is an uploaded block and has its own trades, use those ONLY if user uploaded new data
+      // Otherwise, always use baseTrades (which is date-filtered in parent)
+      if (!isPrimary && uploadedTrades.length > 0) {
+        return uploadedTrades;  // User just uploaded - show their upload
+      }
+      // Default: use base trades (filtered by parent's dateRange)
+      return baseTrades;
+    },
+    [baseTrades, isPrimary, uploadedTrades]
   );
   const hasData = isPrimary || (effectiveTrades && effectiveTrades.length > 0);
 
