@@ -111,6 +111,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   // Support both Trade Log ("Opened On", "Date Opened") and Daily Log ("Date")
   const idxOpenedOn = findIndex(["Opened On", "Date Opened", "Date"]);
   
+  // Use indices for standard fields for performance, but we'll use object scanning for robust Drawdown detection
   const idxOpeningPrice = findIndex(["Opening Price"]);
   const idxLegs = findIndex(["Legs"]);
   const idxPremium = findIndex(["Premium"]);
@@ -134,25 +135,6 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
 
-  // Robust Drawdown detection as requested
-  // Try exact matches first
-  let idxDrawdownPct = findIndex([
-    "drawdown %",
-    "drawdown%",
-    "drawdown pct",
-    "drawdownpct",
-    "drawdown",
-    "dd %",
-    "dd"
-  ]);
-
-  // Fallback: search for any column containing "drawdown" if not found
-  if (idxDrawdownPct === -1) {
-    idxDrawdownPct = normalizedHeader.findIndex(h => h.includes("drawdown"));
-  }
-
-  console.log("[CSV Parser] Detected Drawdown Index:", idxDrawdownPct);
-
   const trades: Trade[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -160,6 +142,41 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     if (!row) continue;
     const cols = splitCsvLine(row);
     const get = (idx: number) => (idx >= 0 && idx < cols.length ? cols[idx] : "");
+
+    // Construct row object for robust detection (as requested)
+    const rowObj: Record<string, string> = {};
+    headers.forEach((h, k) => {
+        rowObj[h] = cols[k] || "";
+    });
+
+    if (i === 1) {
+        console.log("[CSV Parser] Row 1 Keys:", Object.keys(rowObj));
+    }
+
+    // Robust Drawdown detection using object keys
+    let drawdownPct: number | undefined;
+    
+    // 1. Normalize keys and look for "drawdown"
+    const ddKey = Object.keys(rowObj).find(k => {
+        const norm = k.replace(/^\uFEFF/, "").trim().toLowerCase();
+        return ["drawdown %", "drawdown%", "drawdown pct", "drawdownpct", "drawdown", "dd %", "dd"].includes(norm);
+    });
+    
+    // 2. Fallback to includes check
+    const finalDdKey = ddKey ?? Object.keys(rowObj).find(k => k.toLowerCase().includes("drawdown"));
+
+    if (finalDdKey) {
+        const rawDd = rowObj[finalDdKey];
+        if (rawDd !== undefined && rawDd !== null && rawDd !== "") {
+             drawdownPct = parseNumber(rawDd);
+             if (i === 1) {
+                 console.log("[CSV Parser] Row 1 Found Drawdown Key:", finalDdKey, "Raw:", rawDd, "Parsed:", drawdownPct);
+             }
+        }
+    } else if (i === 1) {
+        console.log("[CSV Parser] Row 1 NO Drawdown Key Found in:", Object.keys(rowObj));
+    }
+
 
     const openedOnRaw = get(idxOpenedOn);
     const openedOn = parseDate(openedOnRaw);
@@ -171,15 +188,6 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     if (!openedOn && !closedOn) continue;
 
     const strategy = get(idxStrategy) || "Unknown";
-    
-    // Explicitly parse drawdown with logging for first row
-    const rawDd = get(idxDrawdownPct);
-    const drawdownPct = parseNumber(rawDd);
-    
-    if (i === 1) {
-        console.log("[CSV Parser] Row 1 Raw Drawdown:", rawDd, "Parsed:", drawdownPct);
-    }
-
 
     const trade: Trade = {
       dateOpened: openedOn ?? new Date("1970-01-01"),
@@ -208,8 +216,12 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
       movement: parseNumber(get(idxMovement)),
       maxProfit: parseNumber(get(idxMaxProfit)),
       maxLoss: parseNumber(get(idxMaxLoss)),
-      drawdownPct: parseNumber(get(idxDrawdownPct)),
+      drawdownPct: drawdownPct ?? 0,
     } as Trade;
+    
+    if (i === 1) {
+        console.log("[CSV Parser] Row 1 Entry:", trade);
+    }
 
     trades.push(trade);
   }
