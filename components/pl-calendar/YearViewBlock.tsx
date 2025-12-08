@@ -99,14 +99,14 @@ function parseDate(raw: string | undefined): Date | undefined {
  * Minimal Option Omega CSV parser for ad-hoc uploads in the Year view.
  * Tolerant: missing fields fall back to safe defaults so we can satisfy Trade.
  */
-function parseOptionOmegaCsv(csvText: string): Trade[] {
+function parseOptionOmegaCsv(csvText: string): { trades: Trade[]; detectedMaxDrawdown: number | null } {
   // 1. Universal line splitting
   const lines = csvText
     .split(/\r\n|\n|\r/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return { trades: [], detectedMaxDrawdown: null };
 
   // 2. Auto-detect delimiter
   const delimiter = detectDelimiter(lines[0]);
@@ -155,6 +155,7 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
   const idxMaxLoss = findIndex(["Max Loss"]);
 
   const trades: Trade[] = [];
+  const detectedMaxDrawdownValues: number[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i];
@@ -167,6 +168,23 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     headers.forEach((h, k) => {
         rowObj[h] = cols[k] || "";
     });
+
+    // 1. Log the CSV headers as the parser sees them (User requested debug)
+    if (i === 1 && typeof window !== "undefined") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = window as any;
+        if (!win.__loggedHeaders) {
+            win.__loggedHeaders = true;
+            console.log(
+                "OO uploaded log headers (detailed):",
+                Object.keys(rowObj).map((h) => ({
+                    raw: h,
+                    length: h.length,
+                    chars: Array.from(h).map((c) => c.charCodeAt(0)),
+                }))
+            );
+        }
+    }
 
     let drawdownPct: number | undefined;
 
@@ -191,14 +209,12 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
 
             const n = parseNumber(String(rawVal));
             // parseNumber returns 0 if invalid or 0.
-            // But 0 might be a valid drawdown.
-            // We want to verify it was actually a number.
-            // parseNumber implementation: returns Number.isFinite(n) ? n : 0
-            // so we can trust it generally, but we should make sure we don't catch empty strings as 0 if we can avoid it.
-            // But we checked rawVal !== "" above.
-            
-            drawdownPct = n; 
-            break; // Found it.
+            if (Number.isFinite(n)) {
+                drawdownPct = n; // Found it.
+                // Collect for direct max calc
+                detectedMaxDrawdownValues.push(Math.abs(n));
+                break; // Stop looking.
+            }
         }
     }
 
@@ -259,8 +275,15 @@ function parseOptionOmegaCsv(csvText: string): Trade[] {
     trades.push(trade);
   }
 
-  return trades;
+  const detectedMaxDrawdown = detectedMaxDrawdownValues.length > 0 
+      ? Math.max(...detectedMaxDrawdownValues) 
+      : null;
+
+  return { trades, detectedMaxDrawdown };
 }
+
+
+
 
 export function YearViewBlock({
   block,
@@ -270,21 +293,30 @@ export function YearViewBlock({
   renderContent,
 }: YearViewBlockProps) {
   const { isPrimary, trades, name } = block;
+  const [uploadedTrades, setUploadedTrades] = React.useState<Trade[]>([]);
+  // Store the explicit Max DD found in CSV, if any
+  const [uploadedMaxDrawdown, setUploadedMaxDrawdown] = React.useState<number | null>(null);
 
   const effectiveTrades = React.useMemo(
-    () => (isPrimary ? baseTrades : trades ?? []),
-    [baseTrades, isPrimary, trades]
+    () => (isPrimary ? baseTrades : (uploadedTrades.length > 0 ? uploadedTrades : trades ?? [])),
+    [baseTrades, isPrimary, uploadedTrades, trades]
   );
-  const hasData = isPrimary || (trades && trades.length > 0);
+  const hasData = isPrimary || (effectiveTrades && effectiveTrades.length > 0);
 
   // Helper to inspect parsed drawdown percentages from uploaded logs
   const parsedMaxAbsDrawdown = React.useMemo(() => {
+    // 1. If we found an explicit Drawdown % column in the CSV, use that exact value.
+    if (!isPrimary && uploadedMaxDrawdown !== null) {
+        return uploadedMaxDrawdown;
+    }
+
+    // 2. Fallback to calculating it from trades if no column was found (legacy logic)
     const vals = effectiveTrades
       .map((t) => t.drawdownPct)
-      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-    if (!vals.length) return null;
+      .filter((v): v is number => Number.isFinite(v));
+    if (vals.length === 0) return 0;
     return Math.max(...vals.map((v) => Math.abs(v)));
-  }, [effectiveTrades]);
+  }, [effectiveTrades, isPrimary, uploadedMaxDrawdown]);
 
   const handleExport = useCallback(() => {
     if (!effectiveTrades.length) return;
@@ -340,8 +372,16 @@ export function YearViewBlock({
 
       try {
         const text = await file.text();
-        const parsed = parseOptionOmegaCsv(text);
-        onUpdateTrades(parsed, file.name);
+        if (text) {
+          const { trades: parsedTrades, detectedMaxDrawdown } = parseOptionOmegaCsv(text);
+          
+          // Update local state for rendering
+          setUploadedTrades(parsedTrades);
+          setUploadedMaxDrawdown(detectedMaxDrawdown);
+          
+          // Also update parent so it persists in the block config if needed
+          onUpdateTrades(parsedTrades, file.name);
+        }
       } catch (err) {
         console.error("Failed to parse uploaded log", err);
       } finally {
