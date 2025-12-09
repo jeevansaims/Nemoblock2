@@ -99,6 +99,62 @@ describe("runWithdrawalSimulation (Funds-at-Close V2)", () => {
     expect(simulator.totalWithdrawn).toBe(30000);
   });
 
+  it("reproduces the equity curve when there are no withdrawals (Tripwire Test)", () => {
+    // Synthetic "Funds at Close" from an OO-style equity curve
+    const startingBalance = 100_000;
+
+    const funds = [
+      { monthKey: "2023-01", fundsAtClose: 110_000 }, // +10%
+      { monthKey: "2023-02", fundsAtClose: 99_000 }, // -10%
+      { monthKey: "2023-03", fundsAtClose: 118_800 }, // +20% on 99k
+    ];
+
+    // Convert Funds at Close -> monthly returns (what the sim should use)
+    const baselineMonths = funds.map((row, idx) => {
+      const prevFunds =
+        idx === 0 ? startingBalance : funds[idx - 1].fundsAtClose;
+      const baseReturn = row.fundsAtClose / prevFunds - 1;
+      return { monthKey: row.monthKey, baseReturn };
+    });
+
+    const settings: WithdrawalSimSettings = {
+      startingBalance,
+      mode: "none", // no withdrawals
+      percentOfProfit: 0,
+      fixedDollar: 0,
+      withdrawOnlyProfitableMonths: false,
+      resetToStart: false, // pure compounding
+    };
+
+    const result = runWithdrawalSimulation(baselineMonths, settings);
+
+    // 1) Equity path should match the original funds-at-close curve exactly (within float precision)
+    const equityEndSeries = result.points.map((p) => p.equityEnd);
+    const expectedEquitySeries = funds.map((f) => f.fundsAtClose);
+
+    equityEndSeries.forEach((val, idx) => {
+      expect(val).toBeCloseTo(expectedEquitySeries[idx], 6);
+    });
+
+    // 2) Final equity must match last Funds at Close
+    expect(result.finalEquity).toBeCloseTo(
+      funds[funds.length - 1].fundsAtClose,
+      6
+    );
+
+    // 3) No withdrawals taken
+    expect(result.totalWithdrawn).toBeCloseTo(0, 6);
+
+    // 4) P/L each month should be (equity * monthly return)
+    const returns = baselineMonths.map((b) => b.baseReturn);
+    result.points.forEach((point, idx) => {
+      const prevEquity =
+        idx === 0 ? startingBalance : result.points[idx - 1].equityEnd;
+      const expectedPnl = prevEquity * returns[idx];
+      expect(point.pnlScaled).toBeCloseTo(expectedPnl, 6);
+    });
+  });
+
   it("prevents explosion by using sane returns (Whale Scenario fixed)", () => {
     // Even if we have huge returns, normal usage won't compound to 10^60 if the returns are just "large" (e.g. 50% / month).
     // User's explosion was due to 3000% artificial return from PnL/Base mismatch.
