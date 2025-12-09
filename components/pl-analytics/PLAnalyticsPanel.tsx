@@ -88,7 +88,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawalFixed, setWithdrawalFixed] = useState(0);
   const [withdrawalMode, setWithdrawalMode] = useState<WithdrawalMode>("none");
   const [withdrawOnlyProfitable, setWithdrawOnlyProfitable] = useState(true);
-  const [normalizeOneLot, setNormalizeOneLot] = useState(false);
+  const [normalizeOneLot, setNormalizeOneLot] = useState(true);
   const [resetToStartMonthly, setResetToStartMonthly] = useState(false);
   const [baseCapital, setBaseCapital] = useState(160_000);
   const [allocationSort, setAllocationSort] =
