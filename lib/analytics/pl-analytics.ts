@@ -71,8 +71,8 @@ export interface CapitalPathResult {
 }
 
 /**
-  * Divide trade P/L and basis by contracts to get a 1-lot equivalent view.
-  */
+ * Divide trade P/L and basis by contracts to get a 1-lot equivalent view.
+ */
 export function normalizeTradesToOneLot(trades: RawTrade[]): RawTrade[] {
   return trades.map((t) => {
     const contracts = t.contracts ?? 0;
@@ -82,7 +82,8 @@ export function normalizeTradesToOneLot(trades: RawTrade[]): RawTrade[] {
       strategy: t.strategy,
       pl: t.pl / contracts,
       premium: t.premium !== undefined ? t.premium / contracts : undefined,
-      marginReq: t.marginReq !== undefined ? t.marginReq / contracts : undefined,
+      marginReq:
+        t.marginReq !== undefined ? t.marginReq / contracts : undefined,
       fundsAtClose: t.fundsAtClose,
     };
   });
@@ -185,8 +186,7 @@ export function computeEquityAndWithdrawals(
       ...t,
       pl: t.pl * factor,
       premium: t.premium !== undefined ? t.premium * factor : t.premium,
-      marginReq:
-        t.marginReq !== undefined ? t.marginReq * factor : t.marginReq,
+      marginReq: t.marginReq !== undefined ? t.marginReq * factor : t.marginReq,
     }))
   );
 
@@ -209,7 +209,11 @@ export function computeEquityAndWithdrawals(
   days.forEach((d, idx) => {
     const key = d.date.slice(0, 7);
     if (!monthlyBuckets.has(key)) {
-      monthlyBuckets.set(key, { monthPL: 0, dayIndices: [], startEquity: undefined });
+      monthlyBuckets.set(key, {
+        monthPL: 0,
+        dayIndices: [],
+        startEquity: undefined,
+      });
     }
     const bucket = monthlyBuckets.get(key)!;
     bucket.monthPL += d.pl;
@@ -242,16 +246,18 @@ export function computeEquityAndWithdrawals(
     if (isLastDayOfMonth) {
       const monthPL = bucket.monthPL;
       const equityBeforeWithdrawal = equity;
-    const mode = options.withdrawalMode;
-      const profitOk =
-        !options.withdrawProfitableMonthsOnly || monthPL > 0;
+      const mode = options.withdrawalMode;
+      const profitOk = !options.withdrawProfitableMonthsOnly || monthPL > 0;
 
       switch (mode) {
         case "percent": {
           if (profitOk) {
             withdrawal = Math.max(
               0,
-              Math.min(equityBeforeWithdrawal, monthPL * (options.withdrawalPercent ?? 0))
+              Math.min(
+                equityBeforeWithdrawal,
+                monthPL * (options.withdrawalPercent ?? 0)
+              )
             );
           }
           break;
@@ -299,7 +305,8 @@ export function computeEquityAndWithdrawals(
     const bucket = monthlyBuckets.get(month)!;
     const daysInMonth = bucket.dayIndices.map((i) => daily[i]);
     const withdrawal = daysInMonth.reduce((s, d) => s + (d.withdrawal || 0), 0);
-    const endingEquity = daysInMonth[daysInMonth.length - 1]?.equityAfterWithdrawal ?? 0;
+    const endingEquity =
+      daysInMonth[daysInMonth.length - 1]?.equityAfterWithdrawal ?? 0;
     monthly.push({
       month,
       pl: bucket.monthPL,
@@ -310,7 +317,10 @@ export function computeEquityAndWithdrawals(
   });
 
   const totalPL = daily.reduce((s, d) => s + d.dayPL, 0);
-  const endingCapital = daily.length > 0 ? daily[daily.length - 1].equityAfterWithdrawal : startingCapital;
+  const endingCapital =
+    daily.length > 0
+      ? daily[daily.length - 1].equityAfterWithdrawal
+      : startingCapital;
 
   // Invariant check (debug only; keep silent if matches).
   const lhs = startingCapital + totalPL;
@@ -338,8 +348,10 @@ export function computeEquityAndWithdrawals(
   };
 }
 
+import { format } from "date-fns";
+
 function toDateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return format(date, "yyyy-MM-dd");
 }
 
 function computeCAGR(
