@@ -110,6 +110,14 @@ export function runWithdrawalSimulationV2(params: {
     const ddPct = highWater > 0 ? ((highWater - equity) / highWater) * 100 : 0;
     if (ddPct > maxDdPct) maxDdPct = ddPct;
 
+    // Safety rail: catch explosions (e.g. 10^60) caused by mismatched base capital
+    if (!Number.isFinite(equity)) {
+      console.warn(
+        `[WithdrawalSim] Equity exploded/NaN at ${month}. Base: ${baseCapital}, Start: ${startingBalance}, PnL: ${pnl}. Bailing.`
+      );
+      break;
+    }
+
     points.push({ month, pnl: scaledPnl, withdrawal, equity, equityBase });
   }
 
