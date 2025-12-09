@@ -151,6 +151,40 @@ describe("runWithdrawalSimulationV2", () => {
     expect(Number.isFinite(result.finalEquity)).toBe(true);
   });
 
+  it("Config B (Normal PnL): fixed dollar behaves predictably", () => {
+    // Standard Config: 160k base, normal returns
+    const months: MonthlyPnlPoint[] = [
+      { month: "2023-01", pnl: 16000 }, // +10%
+      { month: "2023-02", pnl: -8000 }, // -5%
+      { month: "2023-03", pnl: 32000 }, // +20%
+    ];
+
+    const result = runWithdrawalSimulationV2({
+      startingBalance: 160000,
+      baseCapital: 160000,
+      mode: "fixedDollar",
+      fixedDollar: 10000,
+      withdrawOnlyProfitableMonths: true,
+      resetToStartingBalance: false,
+      months,
+    });
+
+    // M1: Return +10%. PnL 16k. W=10k. Eq=166k.
+    expect(result.points[0].pnl).toBeCloseTo(16000);
+    expect(result.points[0].withdrawal).toBe(10000);
+    expect(result.points[0].equity).toBeCloseTo(166000);
+
+    // M2: Return -5%. PnL on 166k = -8300. W=0 (loss). Eq=157,700.
+    expect(result.points[1].pnl).toBeCloseTo(-8300);
+    expect(result.points[1].withdrawal).toBe(0);
+    expect(result.points[1].equity).toBeCloseTo(157700);
+
+    // M3: Return +20%. PnL on 157,700 = 31,540. W=10k. Eq=179,240.
+    expect(result.points[2].pnl).toBeCloseTo(31540);
+    expect(result.points[2].withdrawal).toBe(10000);
+    expect(result.points[2].equity).toBeCloseTo(179240);
+  });
+
   it("should match the user provided spec example exactly", () => {
     // Spec Example Inputs
     const months: MonthlyPnlPoint[] = [
