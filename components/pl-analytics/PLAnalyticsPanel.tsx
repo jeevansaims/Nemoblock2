@@ -40,7 +40,7 @@ import {
 import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
 import { cn } from "@/lib/utils";
 import {
-  runWithdrawalSimulationV2,
+  runWithdrawalSimulation,
   WithdrawalMode,
 } from "@/lib/withdrawals/withdrawalSimulatorV2";
 
@@ -348,9 +348,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     const body = withdrawalSim.points
       .map(
         (p) =>
-          `${p.month},${p.pnl.toFixed(2)},${p.withdrawal.toFixed(
+          `${p.month},${p.pnlScaled.toFixed(2)},${p.withdrawal.toFixed(
             2
-          )},${p.equity.toFixed(2)}`
+          )},${p.equityEnd.toFixed(2)}`
       )
       .join("\n");
     const csv = header + body;
@@ -363,31 +363,33 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     URL.revokeObjectURL(url);
   };
 
-  const withdrawalSim = useMemo(
-    () =>
-      runWithdrawalSimulationV2({
-        startingBalance,
-        baseCapital,
-        mode: withdrawalMode,
-        percent:
-          withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
-        fixedDollar:
-          withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
-        withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
-        resetToStartingBalance: resetToStartMonthly,
-        months: monthlyPnlPoints,
-      }),
-    [
+  const withdrawalSim = useMemo(() => {
+    const baselineMonths = monthlyPnlPoints.map((p) => ({
+      monthKey: p.month,
+      basePnl: p.pnl,
+    }));
+
+    return runWithdrawalSimulation(baselineMonths, {
       startingBalance,
-      baseCapital,
-      withdrawalMode,
-      withdrawPercent,
-      withdrawalFixed,
-      withdrawOnlyProfitable,
-      resetToStartMonthly,
-      monthlyPnlPoints,
-    ]
-  );
+      baselineStartingCapital: baseCapital,
+      mode: withdrawalMode,
+      percentOfProfit:
+        withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
+      fixedDollar:
+        withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
+      withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
+      resetToStart: resetToStartMonthly,
+    });
+  }, [
+    startingBalance,
+    baseCapital,
+    withdrawalMode,
+    withdrawPercent,
+    withdrawalFixed,
+    withdrawOnlyProfitable,
+    resetToStartMonthly,
+    monthlyPnlPoints,
+  ]);
 
   if (trades.length === 0) {
     return (
@@ -889,7 +891,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               <Area
                 yAxisId="left"
                 type="monotone"
-                dataKey="equity"
+                dataKey="equityEnd"
                 stroke="#10b981"
                 fillOpacity={1}
                 fill="url(#colorEquity)"
@@ -933,13 +935,13 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                     {row.month}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {fmtUsd(row.pnl)}
+                    {fmtUsd(row.pnlScaled)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs text-amber-300">
                     {fmtUsd(row.withdrawal)}
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs">
-                    {fmtUsd(row.equity)}
+                    {fmtUsd(row.equityEnd)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -973,7 +975,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
             <div className="uppercase tracking-wide text-[10px]">Max DD</div>
             <div className="text-lg font-semibold">
-              {withdrawalSim.maxDdPct.toFixed(1)}%
+              {withdrawalSim.maxDrawdownPct.toFixed(1)}%
             </div>
           </div>
         </div>
