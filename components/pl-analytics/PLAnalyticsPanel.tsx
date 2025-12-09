@@ -378,6 +378,8 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       fixedDollar:
         withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
       withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
+      // Enforce Simple PnL (no compounding) for Fixed $ mode to prevent "Whale" explosions
+      preventCompounding: withdrawalMode === "fixedDollar",
       resetToStart: resetToStartMonthly,
     });
   }, [

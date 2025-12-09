@@ -7,6 +7,7 @@ export interface WithdrawalSimSettings {
   percentOfProfit?: number; // used when mode === "percentOfProfit"
   fixedDollar?: number; // used when mode === "fixedDollar"
   withdrawOnlyProfitableMonths: boolean;
+  preventCompounding?: boolean; // If true, applies P/L to starting balance (simple interest) instead of current equity
   resetToStart: boolean;
 }
 
@@ -80,10 +81,16 @@ export function runWithdrawalSimulation(
       baselineStartingCapital !== 0 ? basePnl / baselineStartingCapital : 0;
 
     // 2) P/L on *current* equity (this is what shows in the P&L column)
-    const monthProfit = equity * baseReturn;
+    // If preventCompounding is TRUE, we simulate "Simple Interest" (P/L based on starting balance)
+    // This allows Fixed $ mode to be stable (additive) even with "Whale" returns.
+    const capitalBasis = settings.preventCompounding ? startingBalance : equity;
+    const monthProfit = capitalBasis * baseReturn;
 
     // Track base equity (what-if no withdrawals)
-    const baseProfit = equityBase * baseReturn;
+    // Base equity usually implies compounding for comparison, but if we are in simple mode, maybe base should also be simple?
+    // Let's keep base equity consistent with the active mode for fair comparison.
+    const baseProfit =
+      (settings.preventCompounding ? startingBalance : equityBase) * baseReturn;
     equityBase += baseProfit;
 
     const isProfitableMonth = monthProfit > 0;
