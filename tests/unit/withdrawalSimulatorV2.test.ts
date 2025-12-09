@@ -101,6 +101,56 @@ describe("runWithdrawalSimulationV2", () => {
     expect(result.points[2].withdrawal).toBe(5840);
   });
 
+  it("Config A (Consistency): matches Calendar Baseline when mode=none, normalize=off", () => {
+    // Should match P/L Calendar exactly if we use same base capital
+    const result = runWithdrawalSimulationV2({
+      startingBalance: 160000,
+      baseCapital: 160000,
+      mode: "none",
+      withdrawOnlyProfitableMonths: true,
+      resetToStartingBalance: true,
+      months: mockMonths,
+    });
+
+    // P/L Scaled should == Raw P/L
+    expect(result.points[0].pnl).toBeCloseTo(5000, 1);
+    expect(result.points[1].pnl).toBeCloseTo(-2000, 1);
+
+    // Withdrawal should equal P/L (skim profit) or 0 (loss)
+    // Month 1: +5000 -> Equity 165000 -> Reset to 160000 -> Withdrawal 5000
+    expect(result.points[0].withdrawal).toBeCloseTo(5000, 1);
+    expect(result.points[0].equity).toBeCloseTo(160000, 1);
+
+    // Month 2: -2000 -> Equity 158000 -> No reset
+    expect(result.points[1].withdrawal).toBe(0);
+    expect(result.points[1].equity).toBeCloseTo(158000, 1);
+  });
+
+  it("Config B (Stability): fixed dollar does not explode", () => {
+    // A "Whale" Month but with mismatched base capital (User forgot to normalize)
+    // BUT fixed dollar should utilize the baseline return logic now, not arbitrary scaling
+    const hugeMonths = [{ month: "2023-01", pnl: 300000 }];
+
+    const result = runWithdrawalSimulationV2({
+      startingBalance: 10000,
+      baseCapital: 10000, // Implies 3000% return
+      mode: "fixedDollar",
+      fixedDollar: 5000,
+      withdrawOnlyProfitableMonths: true,
+      resetToStartingBalance: false,
+      months: hugeMonths,
+    });
+
+    // Baseline Return = 300k / 10k = 30.0 (3000%)
+    // Month Profit = 10k * 30 = 300k.
+    // Withdrawal = min(5000, 310k) = 5000.
+    // End Equity = 10k + 300k - 5k = 305k.
+    // NOT 10^60.
+    expect(result.points[0].pnl).toBeCloseTo(300000, 1);
+    expect(result.points[0].equity).toBeCloseTo(305000, 1);
+    expect(Number.isFinite(result.finalEquity)).toBe(true);
+  });
+
   it("should match the user provided spec example exactly", () => {
     // Spec Example Inputs
     const months: MonthlyPnlPoint[] = [

@@ -73,38 +73,47 @@ export function runWithdrawalSimulationV2(params: {
   const points: WithdrawalPoint[] = [];
 
   for (const { month, pnl } of months) {
-    const monthlyReturn = denom > 0 ? pnl / denom : 0;
-    const scaledPnl = equity * monthlyReturn;
-    const scaledPnlBase = equityBase * monthlyReturn;
+    // 1. BASELINE: Always derive from the calendar P/L (passed as `pnl` in `months`)
+    // `denom` is the baseline capital (usually 160k or 10M for whales)
+    const basePnl = pnl;
+    const baseReturn = denom > 0 ? basePnl / denom : 0;
 
-    const profitable = scaledPnl > 0;
+    // P/L on current equity this month
+    const monthProfit = equity * baseReturn;
+
+    // Base equity just compounds fully (what-if no withdrawals)
+    const scaledPnlBase = equityBase * baseReturn;
+    equityBase = equityBase + scaledPnlBase;
+
+    // 2. WITHDRAWAL LOGIC
+    const isProfitableMonth = monthProfit > 0;
     const canWithdraw =
-      mode !== "none" &&
-      (!withdrawOnlyProfitableMonths || profitable) &&
-      equity > 0;
+      mode !== "none" && (!withdrawOnlyProfitableMonths || isProfitableMonth);
 
     let withdrawal = 0;
+
     if (canWithdraw) {
-      if (mode === "percentOfProfit" && scaledPnl > 0 && percent > 0) {
-        withdrawal = scaledPnl * (percent / 100);
+      if (mode === "percentOfProfit" && isProfitableMonth && percent > 0) {
+        withdrawal = monthProfit * (percent / 100);
       } else if (mode === "fixedDollar" && fixedDollar > 0) {
-        withdrawal = Math.min(fixedDollar, equity + scaledPnl);
+        // Prevent withdrawing more than we have (equity + profit)
+        const equityAfterPnl = equity + monthProfit;
+        const maxAvailable = Math.max(equityAfterPnl, 0);
+        withdrawal = Math.min(fixedDollar, maxAvailable);
       }
     }
 
-    // Apply P/L and withdrawals
-    equity = equity + scaledPnl - withdrawal;
-    // Base always compounds fully
-    equityBase = equityBase + scaledPnlBase;
+    // 3. UPDATE EQUITY
+    equity = equity + monthProfit - withdrawal;
+    totalWithdrawn += withdrawal;
 
-    // Optional reset: skim any equity above the starting balance
+    // 4. RESET TO START
     if (resetToStartingBalance && equity > startingBalance) {
       const extra = equity - startingBalance;
       withdrawal += extra;
+      totalWithdrawn += extra;
       equity = startingBalance;
     }
-
-    totalWithdrawn += withdrawal;
 
     highWater = Math.max(highWater, equity);
     const ddPct = highWater > 0 ? ((highWater - equity) / highWater) * 100 : 0;
@@ -113,12 +122,12 @@ export function runWithdrawalSimulationV2(params: {
     // Safety rail: catch explosions (e.g. 10^60) caused by mismatched base capital
     if (!Number.isFinite(equity)) {
       console.warn(
-        `[WithdrawalSim] Equity exploded/NaN at ${month}. Base: ${baseCapital}, Start: ${startingBalance}, PnL: ${pnl}. Bailing.`
+        `[WithdrawalSim] Equity exploded/NaN at ${month}. Base: ${baseCapital}, Start: ${startingBalance}, PnL: ${basePnl}. Bailing.`
       );
       break;
     }
 
-    points.push({ month, pnl: scaledPnl, withdrawal, equity, equityBase });
+    points.push({ month, pnl: monthProfit, withdrawal, equity, equityBase });
   }
 
   const finalEquity = equity;
