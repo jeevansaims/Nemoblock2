@@ -348,10 +348,10 @@ export function computeEquityAndWithdrawals(
   };
 }
 
-import { format } from "date-fns";
+import { getTradingDayKey } from "@/lib/utils/trading-day";
 
 function toDateKey(date: Date): string {
-  return format(date, "yyyy-MM-dd");
+  return getTradingDayKey(date);
 }
 
 function computeCAGR(
