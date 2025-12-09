@@ -2,14 +2,15 @@ export type WithdrawalMode = "none" | "percentOfProfit" | "fixedDollar";
 
 export interface MonthlyPnlPoint {
   month: string; // YYYY-MM
-  pnl: number;   // monthly P/L for the portfolio at base capital sizing
+  pnl: number; // monthly P/L for the portfolio at base capital sizing
 }
 
 export interface WithdrawalPoint {
   month: string;
-  pnl: number;        // scaled monthly P/L applied to current equity
+  pnl: number; // scaled monthly P/L applied to current equity
   withdrawal: number; // amount skimmed this month
-  equity: number;     // ending equity after withdrawal/reset
+  equity: number; // ending equity after withdrawal/reset
+  equityBase: number; // what equity would be if NO withdrawals ever happened
 }
 
 export interface WithdrawalResult {
@@ -20,7 +21,11 @@ export interface WithdrawalResult {
   maxDdPct: number;
 }
 
-function computeCagrPct(startingBalance: number, finalEquity: number, months: number): number {
+function computeCagrPct(
+  startingBalance: number,
+  finalEquity: number,
+  months: number
+): number {
   const years = months / 12;
   if (years <= 0 || startingBalance <= 0 || finalEquity <= 0) return 0;
   const cagr = Math.pow(finalEquity / startingBalance, 1 / years) - 1;
@@ -49,12 +54,19 @@ export function runWithdrawalSimulationV2(params: {
   } = params;
 
   if (!months.length || startingBalance <= 0) {
-    return { points: [], totalWithdrawn: 0, finalEquity: startingBalance, cagrPct: 0, maxDdPct: 0 };
+    return {
+      points: [],
+      totalWithdrawn: 0,
+      finalEquity: startingBalance,
+      cagrPct: 0,
+      maxDdPct: 0,
+    };
   }
 
   const denom = baseCapital && baseCapital > 0 ? baseCapital : startingBalance;
 
   let equity = startingBalance;
+  let equityBase = startingBalance; // pure compounding, no withdrawals
   let highWater = equity;
   let maxDdPct = 0;
   let totalWithdrawn = 0;
@@ -63,9 +75,13 @@ export function runWithdrawalSimulationV2(params: {
   for (const { month, pnl } of months) {
     const monthlyReturn = denom > 0 ? pnl / denom : 0;
     const scaledPnl = equity * monthlyReturn;
+    const scaledPnlBase = equityBase * monthlyReturn;
 
     const profitable = scaledPnl > 0;
-    const canWithdraw = mode !== "none" && (!withdrawOnlyProfitableMonths || profitable) && equity > 0;
+    const canWithdraw =
+      mode !== "none" &&
+      (!withdrawOnlyProfitableMonths || profitable) &&
+      equity > 0;
 
     let withdrawal = 0;
     if (canWithdraw) {
@@ -78,6 +94,8 @@ export function runWithdrawalSimulationV2(params: {
 
     // Apply P/L and withdrawals
     equity = equity + scaledPnl - withdrawal;
+    // Base always compounds fully
+    equityBase = equityBase + scaledPnlBase;
 
     // Optional reset: skim any equity above the starting balance
     if (resetToStartingBalance && equity > startingBalance) {
@@ -92,7 +110,7 @@ export function runWithdrawalSimulationV2(params: {
     const ddPct = highWater > 0 ? ((highWater - equity) / highWater) * 100 : 0;
     if (ddPct > maxDdPct) maxDdPct = ddPct;
 
-    points.push({ month, pnl: scaledPnl, withdrawal, equity });
+    points.push({ month, pnl: scaledPnl, withdrawal, equity, equityBase });
   }
 
   const finalEquity = equity;

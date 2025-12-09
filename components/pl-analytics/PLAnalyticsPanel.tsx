@@ -1,24 +1,48 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  Area,
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
+import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { KellyScalingPlayground } from "@/components/pl-analytics/KellyScalingPlayground";
-import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
-import { runWithdrawalSimulationV2, WithdrawalMode } from "@/lib/withdrawals/withdrawalSimulatorV2";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   AvgPLStats,
-  RawTrade,
   buildDailyPnL,
   computeAvgPLStats,
   normalizeTradesToOneLot,
+  RawTrade,
 } from "@/lib/analytics/pl-analytics";
-import { computeKellyScaleResults, KellyScaleResult } from "@/lib/kelly/kellyOptimizerV2";
+import {
+  computeKellyScaleResults,
+  KellyScaleResult,
+} from "@/lib/kelly/kellyOptimizerV2";
+import { computeAdvancedKellyV3 } from "@/lib/kelly/kellyOptimizerV3";
 import { cn } from "@/lib/utils";
+import {
+  runWithdrawalSimulationV2,
+  WithdrawalMode,
+} from "@/lib/withdrawals/withdrawalSimulatorV2";
 
 interface PLAnalyticsPanelProps {
   trades: RawTrade[];
@@ -27,13 +51,16 @@ interface PLAnalyticsPanelProps {
 const fmtUsd = (v: number) => {
   const abs = Math.abs(v);
   const sign = v < 0 ? "-" : "";
-  if (abs >= 1_000_000_000_000) return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
-  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000)
+    return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  return `${sign}$${abs.toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })}`;
 };
-
 
 type AllocationSort =
   | "portfolioShare"
@@ -55,8 +82,6 @@ type StrategyAllocationRow = {
   clusterCorrelation?: number;
 };
 
-
-
 export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [startingBalance, setStartingBalance] = useState(160_000);
   const [withdrawPercent, setWithdrawPercent] = useState(30);
@@ -66,7 +91,8 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [normalizeOneLot, setNormalizeOneLot] = useState(false);
   const [resetToStartMonthly, setResetToStartMonthly] = useState(false);
   const [baseCapital, setBaseCapital] = useState(160_000);
-  const [allocationSort, setAllocationSort] = useState<AllocationSort>("portfolioShare");
+  const [allocationSort, setAllocationSort] =
+    useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
 
@@ -74,7 +100,10 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
   }, [normalizeOneLot, trades]);
 
-  const daily = useMemo(() => buildDailyPnL(normalizedTrades), [normalizedTrades]);
+  const daily = useMemo(
+    () => buildDailyPnL(normalizedTrades),
+    [normalizedTrades]
+  );
   const monthlyPnlPoints = useMemo(() => {
     const monthly = new Map<string, number>();
     daily.forEach((d) => {
@@ -163,41 +192,46 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       0
     );
 
-    const rows: StrategyAllocationRow[] = Array.from(byStrategy.values()).map((s) => {
-      const avgAlloc =
-        s.allocations.length > 0
-          ? s.allocations.reduce((a, b) => a + b, 0) / s.allocations.length
-          : 0;
-      const peakDaily = Math.max(
-        0,
-        ...Array.from(s.dailyCapital.values()).map((d) =>
-          d.funds > 0 ? (d.capital / d.funds) * 100 : 0
-        )
-      );
-      const portfolioShare =
-        totalCapitalAll > 0 ? (s.totalCapital / totalCapitalAll) * 100 : 0;
-      const rom = s.totalCapital > 0 ? (s.totalPL / s.totalCapital) * 100 : 0;
-      const pf =
-        s.lossPL > 0
-          ? s.winPL / s.lossPL
-          : s.winPL > 0
-          ? Number.POSITIVE_INFINITY
-          : 0;
+    const rows: StrategyAllocationRow[] = Array.from(byStrategy.values()).map(
+      (s) => {
+        const avgAlloc =
+          s.allocations.length > 0
+            ? s.allocations.reduce((a, b) => a + b, 0) / s.allocations.length
+            : 0;
+        const peakDaily = Math.max(
+          0,
+          ...Array.from(s.dailyCapital.values()).map((d) =>
+            d.funds > 0 ? (d.capital / d.funds) * 100 : 0
+          )
+        );
+        const portfolioShare =
+          totalCapitalAll > 0 ? (s.totalCapital / totalCapitalAll) * 100 : 0;
+        const rom = s.totalCapital > 0 ? (s.totalPL / s.totalCapital) * 100 : 0;
+        const pf =
+          s.lossPL > 0
+            ? s.winPL / s.lossPL
+            : s.winPL > 0
+            ? Number.POSITIVE_INFINITY
+            : 0;
 
-      return {
-        strategy: s.strategy,
-        trades: s.trades,
-        avgAlloc,
-        portfolioShare,
-        peakDaily,
-        netPL: s.totalPL,
-        rom,
-        pf,
-        maxCapitalUsed: s.maxCapitalUsed,
-      };
-    });
+        return {
+          strategy: s.strategy,
+          trades: s.trades,
+          avgAlloc,
+          portfolioShare,
+          peakDaily,
+          netPL: s.totalPL,
+          rom,
+          pf,
+          maxCapitalUsed: s.maxCapitalUsed,
+        };
+      }
+    );
 
-    const sorter: Record<AllocationSort, (a: StrategyAllocationRow, b: StrategyAllocationRow) => number> = {
+    const sorter: Record<
+      AllocationSort,
+      (a: StrategyAllocationRow, b: StrategyAllocationRow) => number
+    > = {
       portfolioShare: (a, b) => b.portfolioShare - a.portfolioShare,
       netPL: (a, b) => b.netPL - a.netPL,
       rom: (a, b) => b.rom - a.rom,
@@ -205,7 +239,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
       avgAlloc: (a, b) => b.avgAlloc - a.avgAlloc,
     };
 
-      return rows.sort(sorter[allocationSort]);
+    return rows.sort(sorter[allocationSort]);
   }, [normalizedTrades, allocationSort]);
 
   const kellyV3Result = useMemo(() => {
@@ -219,17 +253,28 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
         pf: r.pf,
         romPct: r.rom,
         avgFundsPctPerTrade: r.avgAlloc,
-        marginSpikeFactor: r.maxCapitalUsed > 0 ? Math.min(1, r.maxCapitalUsed / startingBalance) : 0,
+        marginSpikeFactor:
+          r.maxCapitalUsed > 0
+            ? Math.min(1, r.maxCapitalUsed / startingBalance)
+            : 0,
         tier: 2,
       })),
       lockRealizedWeights,
     });
-  }, [allocationRows, daily, lockRealizedWeights, startingBalance, targetMaxDdPct]);
+  }, [
+    allocationRows,
+    daily,
+    lockRealizedWeights,
+    startingBalance,
+    targetMaxDdPct,
+  ]);
 
   const handleExportKellyCsv = () => {
     if (!kellyV3Result) return;
     const header = "Strategy,KellyPct\n";
-    const body = kellyV3Result.rows.map((row) => `${row.name},${row.finalKellyPct.toFixed(2)}`).join("\n");
+    const body = kellyV3Result.rows
+      .map((row) => `${row.name},${row.finalKellyPct.toFixed(2)}`)
+      .join("\n");
     const csv = header + body;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -243,7 +288,12 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const handleExportWithdrawalCsv = () => {
     const header = "Month,PnL,Withdrawal,Equity\n";
     const body = withdrawalSim.points
-      .map((p) => `${p.month},${p.pnl.toFixed(2)},${p.withdrawal.toFixed(2)},${p.equity.toFixed(2)}`)
+      .map(
+        (p) =>
+          `${p.month},${p.pnl.toFixed(2)},${p.withdrawal.toFixed(
+            2
+          )},${p.equity.toFixed(2)}`
+      )
       .join("\n");
     const csv = header + body;
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -261,8 +311,10 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
         startingBalance,
         baseCapital,
         mode: withdrawalMode,
-        percent: withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
-        fixedDollar: withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
+        percent:
+          withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
+        fixedDollar:
+          withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
         withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
         resetToStartingBalance: resetToStartMonthly,
         months: monthlyPnlPoints,
@@ -282,7 +334,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   if (trades.length === 0) {
     return (
       <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">No trade data available.</CardContent>
+        <CardContent className="p-6 text-sm text-muted-foreground">
+          No trade data available.
+        </CardContent>
       </Card>
     );
   }
@@ -304,7 +358,9 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             </button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Based on capital used per trade vs. Funds at Close. Avg % is per trade, portfolio share is total capital used by the strategy vs all trades.
+            Based on capital used per trade vs. Funds at Close. Avg % is per
+            trade, portfolio share is total capital used by the strategy vs all
+            trades.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -340,9 +396,15 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                   <TableRow className="text-muted-foreground">
                     <TableHead>Strategy</TableHead>
                     <TableHead className="text-right">Trades</TableHead>
-                    <TableHead className="text-right">Avg % Funds / trade</TableHead>
-                    <TableHead className="text-right">Portfolio share</TableHead>
-                    <TableHead className="text-right">Peak daily alloc</TableHead>
+                    <TableHead className="text-right">
+                      Avg % Funds / trade
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Portfolio share
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Peak daily alloc
+                    </TableHead>
                     <TableHead className="text-right">Net P/L</TableHead>
                     <TableHead className="text-right">ROM%</TableHead>
                   </TableRow>
@@ -350,15 +412,32 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 <TableBody>
                   {allocationRows.map((row) => (
                     <TableRow key={row.strategy}>
-                      <TableCell className="font-medium">{row.strategy}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{row.trades}</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{row.avgAlloc.toFixed(1)}%</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{row.portfolioShare.toFixed(1)}%</TableCell>
-                      <TableCell className="text-right font-mono text-xs">{row.peakDaily.toFixed(1)}%</TableCell>
-                      <TableCell className={cn("text-right font-mono text-xs", row.netPL >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                      <TableCell className="font-medium">
+                        {row.strategy}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.trades}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.avgAlloc.toFixed(1)}%
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.portfolioShare.toFixed(1)}%
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.peakDaily.toFixed(1)}%
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-mono text-xs",
+                          row.netPL >= 0 ? "text-emerald-400" : "text-rose-400"
+                        )}
+                      >
                         {fmtUsd(row.netPL)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">{row.rom.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {row.rom.toFixed(1)}%
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -400,17 +479,23 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             {kellyV3Result && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Baseline Max DD:{" "}
-                <span className="font-mono">{kellyV3Result.baselineMaxDdPct.toFixed(1)}%</span>
+                <span className="font-mono">
+                  {kellyV3Result.baselineMaxDdPct.toFixed(1)}%
+                </span>
                 {" · "}
                 Est. Max DD:{" "}
-                <span className="font-mono">{kellyV3Result.estMaxDdPct.toFixed(1)}%</span>
+                <span className="font-mono">
+                  {kellyV3Result.estMaxDdPct.toFixed(1)}%
+                </span>
               </p>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">Target Max DD %</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Target Max DD %
+              </span>
               <Input
                 type="number"
                 className="h-8 w-16 rounded-md border border-border bg-background px-2 text-xs font-mono"
@@ -432,7 +517,12 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
               <span>Lock realized weights</span>
             </label>
 
-            <Button size="sm" variant="outline" onClick={handleExportKellyCsv} disabled={!kellyV3Result}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportKellyCsv}
+              disabled={!kellyV3Result}
+            >
               Export CSV
             </Button>
           </div>
@@ -445,30 +535,56 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 <th className="py-2 pr-4 text-left font-medium">Strategy</th>
                 <th className="px-2 py-2 text-right font-medium">PF</th>
                 <th className="px-2 py-2 text-right font-medium">ROM%</th>
-                <th className="px-2 py-2 text-right font-medium">Margin spike</th>
+                <th className="px-2 py-2 text-right font-medium">
+                  Margin spike
+                </th>
                 <th className="px-2 py-2 text-right font-medium">Base Kelly</th>
-                <th className="px-2 py-2 text-right font-medium">After tiers/margin</th>
-                <th className="px-2 py-2 text-right font-medium">Final (portfolio Kelly)</th>
+                <th className="px-2 py-2 text-right font-medium">
+                  After tiers/margin
+                </th>
+                <th className="px-2 py-2 text-right font-medium">
+                  Final (portfolio Kelly)
+                </th>
               </tr>
             </thead>
             <tbody>
               {!kellyV3Result && (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
+                  <td
+                    colSpan={7}
+                    className="py-6 text-center text-xs text-muted-foreground"
+                  >
                     Not enough data to compute Kelly yet.
                   </td>
                 </tr>
               )}
 
               {kellyV3Result?.rows.map((row) => (
-                <tr key={row.name} className="border-b border-border/40 last:border-0">
-                  <td className="py-2 pr-4 text-left font-medium text-[11px]">{row.name}</td>
-                  <td className="px-2 py-2 text-right font-mono">{row.pf.toFixed(2)}</td>
-                  <td className="px-2 py-2 text-right font-mono">{row.romPct.toFixed(1)}%</td>
-                  <td className="px-2 py-2 text-right font-mono">{(row.marginSpikeFactor * 100).toFixed(0)}%</td>
-                  <td className="px-2 py-2 text-right font-mono">{row.rawKellyPct.toFixed(1)}%</td>
-                  <td className="px-2 py-2 text-right font-mono">{row.baseKellyPct.toFixed(1)}%</td>
-                  <td className="px-2 py-2 text-right font-mono text-emerald-400">{row.finalKellyPct.toFixed(1)}%</td>
+                <tr
+                  key={row.name}
+                  className="border-b border-border/40 last:border-0"
+                >
+                  <td className="py-2 pr-4 text-left font-medium text-[11px]">
+                    {row.name}
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono">
+                    {row.pf.toFixed(2)}
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono">
+                    {row.romPct.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono">
+                    {(row.marginSpikeFactor * 100).toFixed(0)}%
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono">
+                    {row.rawKellyPct.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono">
+                    {row.baseKellyPct.toFixed(1)}%
+                  </td>
+                  <td className="px-2 py-2 text-right font-mono text-emerald-400">
+                    {row.finalKellyPct.toFixed(1)}%
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -479,47 +595,60 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
             <div>
               Portfolio Kelly:{" "}
-              <span className="font-mono">{(kellyV3Result.portfolioKellyScale * 100).toFixed(1)}%</span>
+              <span className="font-mono">
+                {(kellyV3Result.portfolioKellyScale * 100).toFixed(1)}%
+              </span>
             </div>
             <div>
-              Est. Max DD: <span className="font-mono">{kellyV3Result.estMaxDdPct.toFixed(1)}%</span>
+              Est. Max DD:{" "}
+              <span className="font-mono">
+                {kellyV3Result.estMaxDdPct.toFixed(1)}%
+              </span>
             </div>
           </div>
         )}
       </div>
-
 
       {/* Withdrawal Simulator v2 */}
       <div className="rounded-2xl border border-border bg-card p-4 md:p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">Withdrawal Simulator</h2>
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+                Withdrawal Simulator
+              </h2>
               <button
                 type="button"
                 className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-[10px] text-muted-foreground"
-                title="Uses trade-level capital usage (fundsAtClose / margin / premium) to resize as equity changes. Withdrawals are % of monthly profit or fixed $, recomputed statelessly."
+                title="Simulates withdrawing % of monthly profit or fixed $ from your portfolio, using real backtest P/L and compounding."
               >
                 ?
               </button>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Profit-based withdrawals; changing % just re-runs the sim on the original log.
+              Profit-based withdrawals; changing % just re-runs the sim on the
+              original log.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Starting balance</span>
+              <span className="text-xs text-muted-foreground">
+                Starting balance
+              </span>
               <Input
                 type="number"
                 value={startingBalance}
-                onChange={(e) => setStartingBalance(Number(e.target.value) || 0)}
+                onChange={(e) =>
+                  setStartingBalance(Number(e.target.value) || 0)
+                }
                 className="h-8 w-24 text-xs"
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Base capital</span>
+              <span className="text-xs text-muted-foreground">
+                Base capital
+              </span>
               <Input
                 type="number"
                 value={baseCapital}
@@ -529,9 +658,13 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Withdrawal mode</span>
+              <span className="text-xs text-muted-foreground">
+                Withdrawal mode
+              </span>
               <div className="flex flex-wrap gap-2">
-                {(["none", "percentOfProfit", "fixedDollar"] as WithdrawalMode[]).map((mode) => (
+                {(
+                  ["none", "percentOfProfit", "fixedDollar"] as WithdrawalMode[]
+                ).map((mode) => (
                   <Button
                     key={mode}
                     size="sm"
@@ -539,7 +672,11 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                     onClick={() => setWithdrawalMode(mode)}
                     className="h-8 text-xs"
                   >
-                    {mode === "none" ? "None" : mode === "percentOfProfit" ? "Percent" : "Fixed $"}
+                    {mode === "none"
+                      ? "None"
+                      : mode === "percentOfProfit"
+                      ? "Percent"
+                      : "Fixed $"}
                   </Button>
                 ))}
               </div>
@@ -547,14 +684,18 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
             {withdrawalMode === "percentOfProfit" && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Percent of monthly profit</span>
+                <span className="text-xs text-muted-foreground">
+                  Percent of monthly profit
+                </span>
                 <Input
                   type="number"
                   value={withdrawPercent}
                   min={0}
                   max={100}
                   step={0.25}
-                  onChange={(e) => setWithdrawPercent(Number(e.target.value) || 0)}
+                  onChange={(e) =>
+                    setWithdrawPercent(Number(e.target.value) || 0)
+                  }
                   className="h-8 w-20 text-xs"
                 />
               </div>
@@ -562,13 +703,17 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
             {withdrawalMode === "fixedDollar" && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Fixed $ per month</span>
+                <span className="text-xs text-muted-foreground">
+                  Fixed $ per month
+                </span>
                 <Input
                   type="number"
                   value={withdrawalFixed}
                   min={0}
                   step={100}
-                  onChange={(e) => setWithdrawalFixed(Number(e.target.value) || 0)}
+                  onChange={(e) =>
+                    setWithdrawalFixed(Number(e.target.value) || 0)
+                  }
                   className="h-8 w-24 text-xs"
                 />
               </div>
@@ -584,7 +729,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
                 setWithdrawalMode("none");
                 setWithdrawPercent(30);
                 setWithdrawalFixed(0);
-                setResetToStartMonthly(true);
+                setResetToStartMonthly(false);
               }}
             >
               Reset to start
@@ -602,17 +747,115 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
-            <Switch checked={withdrawOnlyProfitable} onCheckedChange={setWithdrawOnlyProfitable} />
+            <Switch
+              checked={withdrawOnlyProfitable}
+              onCheckedChange={setWithdrawOnlyProfitable}
+            />
             <span>Withdraw only on profitable months</span>
           </div>
           <div className="flex items-center gap-2">
-            <Switch checked={normalizeOneLot} onCheckedChange={setNormalizeOneLot} />
+            <Switch
+              checked={normalizeOneLot}
+              onCheckedChange={setNormalizeOneLot}
+            />
             <span>Normalize to 1-lot (divide P/L & basis by contracts)</span>
           </div>
           <div className="flex items-center gap-2">
-            <Switch checked={resetToStartMonthly} onCheckedChange={setResetToStartMonthly} />
-            <span>Reset to starting balance each month (skim all profit)</span>
+            <Switch
+              checked={resetToStartMonthly}
+              onCheckedChange={setResetToStartMonthly}
+            />
+            <span>
+              Reset equity to starting balance each month (withdraw any excess)
+            </span>
           </div>
+        </div>
+
+        <div className="h-[300px] w-full mt-6 mb-6">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={withdrawalSim.points}>
+              <defs>
+                <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#333"
+              />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 10, fill: "#888" }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={30}
+              />
+              <YAxis
+                yAxisId="left"
+                tick={{ fontSize: 10, fill: "#888" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(val) =>
+                  `$${val >= 1000 ? (val / 1000).toFixed(0) + "k" : val}`
+                }
+                domain={["auto", "auto"]}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fontSize: 10, fill: "#fbbf24" }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(val) => (val > 0 ? `$${val}` : "")}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1f2937",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontSize: "12px",
+                }}
+                itemStyle={{ color: "#e5e7eb" }}
+                labelStyle={{ color: "#9ca3af", marginBottom: "4px" }}
+                formatter={(value: number, name: string) => [
+                  fmtUsd(value),
+                  name === "equity"
+                    ? "Equity"
+                    : name === "equityBase"
+                    ? "Base Equity"
+                    : "Withdrawal",
+                ]}
+              />
+              <Area
+                yAxisId="left"
+                type="monotone"
+                dataKey="equity"
+                stroke="#10b981"
+                fillOpacity={1}
+                fill="url(#colorEquity)"
+                strokeWidth={2}
+              />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="equityBase"
+                stroke="#6b7280"
+                strokeDasharray="4 4"
+                dot={false}
+                strokeWidth={1.5}
+                activeDot={false}
+              />
+              <Bar
+                yAxisId="right"
+                dataKey="withdrawal"
+                fill="#fbbf24"
+                opacity={0.8}
+                barSize={20}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
 
         <div className="rounded-lg border">
@@ -628,10 +871,18 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
             <TableBody>
               {withdrawalSim.points.map((row) => (
                 <TableRow key={row.month}>
-                  <TableCell className="font-mono text-xs">{row.month}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.pnl)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs text-amber-300">{fmtUsd(row.withdrawal)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs">{fmtUsd(row.equity)}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {row.month}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {fmtUsd(row.pnl)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs text-amber-300">
+                    {fmtUsd(row.withdrawal)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-xs">
+                    {fmtUsd(row.equity)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -640,20 +891,32 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
 
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 text-[11px] text-muted-foreground">
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
-            <div className="uppercase tracking-wide text-[10px]">Total Withdrawn</div>
-            <div className="text-lg font-semibold text-amber-300">{fmtUsd(withdrawalSim.totalWithdrawn)}</div>
+            <div className="uppercase tracking-wide text-[10px]">
+              Total Withdrawn
+            </div>
+            <div className="text-lg font-semibold text-amber-300">
+              {fmtUsd(withdrawalSim.totalWithdrawn)}
+            </div>
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
-            <div className="uppercase tracking-wide text-[10px]">Final Equity</div>
-            <div className="text-lg font-semibold">{fmtUsd(withdrawalSim.finalEquity)}</div>
+            <div className="uppercase tracking-wide text-[10px]">
+              Final Equity
+            </div>
+            <div className="text-lg font-semibold">
+              {fmtUsd(withdrawalSim.finalEquity)}
+            </div>
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
             <div className="uppercase tracking-wide text-[10px]">CAGR</div>
-            <div className="text-lg font-semibold">{withdrawalSim.cagrPct.toFixed(1)}%</div>
+            <div className="text-lg font-semibold">
+              {withdrawalSim.cagrPct.toFixed(1)}%
+            </div>
           </div>
           <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
             <div className="uppercase tracking-wide text-[10px]">Max DD</div>
-            <div className="text-lg font-semibold">{withdrawalSim.maxDdPct.toFixed(1)}%</div>
+            <div className="text-lg font-semibold">
+              {withdrawalSim.maxDdPct.toFixed(1)}%
+            </div>
           </div>
         </div>
       </div>
@@ -675,8 +938,15 @@ function StatsGrid({ stats }: { stats: AvgPLStats }) {
       {items.map((item) => (
         <Card key={item.label}>
           <CardContent className="p-3">
-            <div className="text-[11px] uppercase tracking-wide text-neutral-500">{item.label}</div>
-            <div className={cn("text-lg font-semibold", item.value >= 0 ? "text-emerald-400" : "text-rose-400")}>
+            <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+              {item.label}
+            </div>
+            <div
+              className={cn(
+                "text-lg font-semibold",
+                item.value >= 0 ? "text-emerald-400" : "text-rose-400"
+              )}
+            >
               {fmtUsd(item.value)}
             </div>
           </CardContent>
