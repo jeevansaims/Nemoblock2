@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { PLAnalyticsPanel } from "@/components/pl-analytics/PLAnalyticsPanel";
 import { NoActiveBlock } from "@/components/no-active-block";
+import { PLAnalyticsPanel } from "@/components/pl-analytics/PLAnalyticsPanel";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { RawTrade } from "@/lib/analytics/pl-analytics";
 import { getTradesByBlockWithOptions } from "@/lib/db";
@@ -56,12 +56,15 @@ export default function PlAnalyticsPage() {
         id: t.timeOpened ? `${t.dateOpened}-${t.timeOpened}` : String(idx),
         strategy: t.strategy || "Uncategorized",
         openedOn: new Date(t.dateOpened),
-        closedOn: t.dateClosed ? new Date(t.dateClosed) : new Date(t.dateOpened),
+        closedOn: t.dateClosed
+          ? new Date(t.dateClosed)
+          : new Date(t.dateOpened),
         pl: t.pl || 0,
         premium: t.premium,
         marginReq: t.marginReq,
         contracts: t.numContracts,
         fundsAtClose: t.fundsAtClose ?? undefined,
+        dayKey: t.dayKey,
       })),
     [trades]
   );

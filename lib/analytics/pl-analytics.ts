@@ -12,6 +12,7 @@ export interface RawTrade {
   marginReq?: number;
   contracts?: number;
   fundsAtClose?: number;
+  dayKey?: string; // e.g. "2023-05-15" (ET based) from DB
 }
 
 export interface DailyPnLPoint {
@@ -99,7 +100,15 @@ export function buildDailyPnL(trades: RawTrade[]): DailyPnLPoint[] {
   );
 
   sorted.forEach((t) => {
-    const key = toDateKey(t.closedOn);
+    // If trade already has an ET-based dayKey (from Calendar logic), use it.
+    // Otherwise fall back to deriving it from the closedOn date.
+    // NOTE: Calendar uses Open Date for grouping; Simulator historically used Close Date.
+    // To match Calendar exactly, we should ideally use the same key it uses.
+    // For most users, p/l is realized on close, but "Calendar P/L" often implies daily attribution.
+    // Since the USER explicitly requested matching the Calendar, we prefer the Calendar's key.
+    const key =
+      t.dayKey && t.dayKey !== "1970-01-01" ? t.dayKey : toDateKey(t.closedOn);
+
     grouped.set(key, (grouped.get(key) ?? 0) + (t.pl || 0));
   });
 
