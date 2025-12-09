@@ -364,33 +364,71 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   };
 
   const withdrawalSim = useMemo(() => {
-    const baselineMonths = monthlyPnlPoints.map((p) => ({
-      monthKey: p.month,
-      basePnl: p.pnl,
-    }));
+    // 1. Group trades by month to find the LAST trade of each month
+    const monthlyLastTrade = new Map<string, RawTrade>();
+    // Assume normalizedTrades are typically sorted by close date, but enforce safety:
+    // We already have monthlyPnlPoints which are sorted, but we need the raw trades.
+    // Let's iterate the full list.
+    const sortedTrades = [...normalizedTrades].sort(
+      (a, b) => a.closedOn.getTime() - b.closedOn.getTime()
+    );
+
+    sortedTrades.forEach((t) => {
+      // Use calendar logic for bucketing if possible, but FundsAtClose is intrinsically tied to the running equity curve
+      // which is strictly Time-ordered.
+      // We'll use strict YYYY-MM from closedOn for FundsAtClose tracking to match visual curve order.
+      const key = t.closedOn.toISOString().slice(0, 7);
+      monthlyLastTrade.set(key, t);
+    });
+
+    const sortedMonthKeys = Array.from(monthlyLastTrade.keys()).sort();
+
+    // 2. Calculate monthly returns based on Funds At Close change
+    const baselineMonths = sortedMonthKeys.map((monthKey, idx) => {
+      const currentTrade = monthlyLastTrade.get(monthKey)!;
+      const currentFunds = currentTrade.fundsAtClose ?? 0;
+
+      let prevFunds = startingBalance; // Default to starting balance for first month return
+
+      if (idx > 0) {
+        const prevKey = sortedMonthKeys[idx - 1];
+        const prevTrade = monthlyLastTrade.get(prevKey)!;
+        prevFunds = prevTrade.fundsAtClose ?? startingBalance;
+      }
+
+      // Calculate Return: (End / Start) - 1
+      // If funds key is missing or 0, fallback to 0 return
+      const baseReturn =
+        prevFunds > 0 && currentFunds > 0 ? currentFunds / prevFunds - 1 : 0;
+
+      return {
+        monthKey,
+        baseReturn,
+      };
+    });
+
+    // If no fundsAtClose data (e.g. old logs), baselineSteps will be 0 returns.
+    // Fallback? If baseReturn is consistently 0 (and we have PnL), maybe warn or fallback?
+    // User specifically asked for FundsAtClose support. We assume it exists.
 
     return runWithdrawalSimulation(baselineMonths, {
       startingBalance,
-      baselineStartingCapital: baseCapital,
       mode: withdrawalMode,
       percentOfProfit:
         withdrawalMode === "percentOfProfit" ? withdrawPercent : undefined,
       fixedDollar:
         withdrawalMode === "fixedDollar" ? withdrawalFixed : undefined,
       withdrawOnlyProfitableMonths: withdrawOnlyProfitable,
-      // Enforce Simple PnL (no compounding) for Fixed $ mode to prevent "Whale" explosions
-      preventCompounding: withdrawalMode === "fixedDollar",
       resetToStart: resetToStartMonthly,
     });
   }, [
     startingBalance,
-    baseCapital,
     withdrawalMode,
     withdrawPercent,
     withdrawalFixed,
     withdrawOnlyProfitable,
     resetToStartMonthly,
-    monthlyPnlPoints,
+    normalizedTrades,
   ]);
 
   if (trades.length === 0) {

@@ -1,27 +1,25 @@
 export type WithdrawalMode = "none" | "percentOfProfit" | "fixedDollar";
 
 export interface WithdrawalSimSettings {
-  startingBalance: number; // e.g. 160_000
-  baselineStartingCapital: number; // same as base capital used to compute monthly P/L (usually 160_000)
+  startingBalance: number;
   mode: WithdrawalMode;
-  percentOfProfit?: number; // used when mode === "percentOfProfit"
-  fixedDollar?: number; // used when mode === "fixedDollar"
+  percentOfProfit?: number;
+  fixedDollar?: number;
   withdrawOnlyProfitableMonths: boolean;
-  preventCompounding?: boolean; // If true, applies P/L to starting balance (simple interest) instead of current equity
   resetToStart: boolean;
 }
 
-export interface MonthlyBaselinePnl {
+export interface MonthlyBaselineEntry {
   monthKey: string; // "YYYY-MM"
-  basePnl: number; // same P/L the P/L Calendar uses for that month (on baselineStartingCapital)
+  baseReturn: number; // e.g. 0.05 for 5% return (from Funds At Close)
 }
 
 export interface WithdrawalPoint {
-  month: string; // "YYYY-MM"
-  pnlScaled: number; // P/L on *current* equity before withdrawal
-  withdrawal: number; // withdrawal actually taken that month
-  equityEnd: number; // equity after P/L + withdrawal + optional reset
-  equityBase: number; // Added to match previous interface usage in UI (tracking pure compounding)
+  month: string;
+  pnlScaled: number;
+  withdrawal: number;
+  equityEnd: number;
+  equityBase: number;
 }
 
 export interface WithdrawalSimResult {
@@ -47,17 +45,14 @@ function computeCagr(
 }
 
 /**
- * Pure withdrawal simulator.
- * - baselineMonths must be sorted by monthKey ascending ("YYYY-MM").
- * - basePnl must be the *same* monthly P/L used by the P/L Calendar (on baselineStartingCapital).
+ * Pure withdrawal simulator driven by Funds-at-Close returns.
  */
 export function runWithdrawalSimulation(
-  baselineMonths: MonthlyBaselinePnl[],
+  baselineMonths: MonthlyBaselineEntry[],
   settings: WithdrawalSimSettings
 ): WithdrawalSimResult {
   const {
     startingBalance,
-    baselineStartingCapital,
     mode,
     percentOfProfit = 0,
     fixedDollar = 0,
@@ -66,7 +61,6 @@ export function runWithdrawalSimulation(
   } = settings;
 
   let equity = startingBalance;
-  // Track equityBase (pure compounding) separate from withdrawal-affected equity
   let equityBase = startingBalance;
 
   let highWater = startingBalance;
@@ -75,22 +69,12 @@ export function runWithdrawalSimulation(
 
   const points: WithdrawalPoint[] = [];
 
-  for (const { monthKey, basePnl } of baselineMonths) {
-    // 1) Convert calendar P/L into a return on baseline capital
-    const baseReturn =
-      baselineStartingCapital !== 0 ? basePnl / baselineStartingCapital : 0;
-
-    // 2) P/L on *current* equity (this is what shows in the P&L column)
-    // If preventCompounding is TRUE, we simulate "Simple Interest" (P/L based on starting balance)
-    // This allows Fixed $ mode to be stable (additive) even with "Whale" returns.
-    const capitalBasis = settings.preventCompounding ? startingBalance : equity;
-    const monthProfit = capitalBasis * baseReturn;
+  for (const { monthKey, baseReturn } of baselineMonths) {
+    // 1) P/L on *current* equity using the baseline return
+    const monthProfit = equity * baseReturn;
 
     // Track base equity (what-if no withdrawals)
-    // Base equity usually implies compounding for comparison, but if we are in simple mode, maybe base should also be simple?
-    // Let's keep base equity consistent with the active mode for fair comparison.
-    const baseProfit =
-      (settings.preventCompounding ? startingBalance : equityBase) * baseReturn;
+    const baseProfit = equityBase * baseReturn;
     equityBase += baseProfit;
 
     const isProfitableMonth = monthProfit > 0;
@@ -98,7 +82,7 @@ export function runWithdrawalSimulation(
 
     let withdrawal = 0;
 
-    // 3) Decide withdrawal amount based on mode
+    // 2) Decide withdrawal amount based on mode
     if (mode === "percentOfProfit" && canWithdraw && monthProfit > 0) {
       withdrawal = monthProfit * (percentOfProfit / 100);
     } else if (mode === "fixedDollar" && canWithdraw) {
@@ -107,11 +91,11 @@ export function runWithdrawalSimulation(
       withdrawal = Math.min(fixedDollar, maxAvailable);
     }
 
-    // 4) Apply P&L and withdrawal
+    // 3) Apply P&L and withdrawal
     equity = equity + monthProfit - withdrawal;
     totalWithdrawn += withdrawal;
 
-    // 5) Optional reset-to-start (withdraw all excess above startingBalance)
+    // 4) Optional reset-to-start (withdraw all excess above startingBalance)
     if (resetToStart && equity > startingBalance) {
       const extra = equity - startingBalance;
       equity = startingBalance;
@@ -119,7 +103,7 @@ export function runWithdrawalSimulation(
       totalWithdrawn += extra;
     }
 
-    // 6) Update drawdown from peak
+    // 5) Update drawdown from peak
     if (equity > highWater) {
       highWater = equity;
     }
@@ -128,11 +112,10 @@ export function runWithdrawalSimulation(
       maxDrawdownPct = ddPct;
     }
 
-    // 7) Guard against NaN/Infinity explosions
+    // 6) Guard against NaN/Infinity explosions
     if (!Number.isFinite(equity) || !Number.isFinite(monthProfit)) {
       console.error("[WithdrawalSim] Non-finite equity/monthProfit", {
         monthKey,
-        basePnl,
         baseReturn,
         equity,
         monthProfit,
