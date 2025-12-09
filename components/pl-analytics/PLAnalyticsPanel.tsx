@@ -88,13 +88,70 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [withdrawalFixed, setWithdrawalFixed] = useState(0);
   const [withdrawalMode, setWithdrawalMode] = useState<WithdrawalMode>("none");
   const [withdrawOnlyProfitable, setWithdrawOnlyProfitable] = useState(true);
-  const [normalizeOneLot, setNormalizeOneLot] = useState(true);
-  const [resetToStartMonthly, setResetToStartMonthly] = useState(false);
+  // Default normalizeOneLot to false as requested by user
+  const [normalizeOneLot, setNormalizeOneLot] = useState(false);
+  // Default resetToStartMonthly to true as requested by user
+  const [resetToStartMonthly, setResetToStartMonthly] = useState(true);
   const [baseCapital, setBaseCapital] = useState(160_000);
   const [allocationSort, setAllocationSort] =
     useState<AllocationSort>("portfolioShare");
   const [targetMaxDdPct, setTargetMaxDdPct] = useState<number>(16);
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
+
+  // Persistence for Withdrawal Simulator settings
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("withdrawSimSettings");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.startingBalance === "number")
+          setStartingBalance(parsed.startingBalance);
+        if (typeof parsed.withdrawPercent === "number")
+          setWithdrawPercent(parsed.withdrawPercent);
+        if (typeof parsed.withdrawalFixed === "number")
+          setWithdrawalFixed(parsed.withdrawalFixed);
+        if (parsed.withdrawalMode) setWithdrawalMode(parsed.withdrawalMode);
+        if (typeof parsed.withdrawOnlyProfitable === "boolean")
+          setWithdrawOnlyProfitable(parsed.withdrawOnlyProfitable);
+        if (typeof parsed.normalizeOneLot === "boolean")
+          setNormalizeOneLot(parsed.normalizeOneLot);
+        if (typeof parsed.resetToStartMonthly === "boolean")
+          setResetToStartMonthly(parsed.resetToStartMonthly);
+        if (typeof parsed.baseCapital === "number")
+          setBaseCapital(parsed.baseCapital);
+      } catch (e) {
+        console.error("Failed to parse saved withdrawal settings", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const settings = {
+      startingBalance,
+      withdrawPercent,
+      withdrawalFixed,
+      withdrawalMode,
+      withdrawOnlyProfitable,
+      normalizeOneLot,
+      resetToStartMonthly,
+      baseCapital,
+    };
+    window.localStorage.setItem(
+      "withdrawSimSettings",
+      JSON.stringify(settings)
+    );
+  }, [
+    startingBalance,
+    withdrawPercent,
+    withdrawalFixed,
+    withdrawalMode,
+    withdrawOnlyProfitable,
+    normalizeOneLot,
+    resetToStartMonthly,
+    baseCapital,
+  ]);
 
   const normalizedTrades = useMemo(() => {
     return normalizeOneLot ? normalizeTradesToOneLot(trades) : trades;
