@@ -99,6 +99,7 @@ export function PLAnalyticsPanel({ trades }: PLAnalyticsPanelProps) {
   const [lockRealizedWeights, setLockRealizedWeights] = useState<boolean>(true);
 
   // Persistence for Withdrawal Simulator settings
+  // Persistence for Withdrawal Simulator settings - trigger build
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem("withdrawSimSettings");
