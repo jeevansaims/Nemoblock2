@@ -9,6 +9,7 @@ import {
   IconRouteSquare,
   IconSparkles,
   IconStack2,
+  IconCalendarStats,
   IconTimelineEvent,
   IconTrendingDown,
 } from "@tabler/icons-react";
@@ -58,6 +59,11 @@ const navData = {
       title: "Risk Simulator",
       href: "/risk-simulator",
       icon: IconRouteSquare,
+    },
+    {
+      title: "P/L Calendar",
+      href: "/pl-calendar",
+      icon: IconCalendarStats,
     },
     {
       title: "Correlation Matrix",
