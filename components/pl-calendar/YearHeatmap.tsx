@@ -7,6 +7,8 @@ interface MonthlySummary {
   netPL: number;
   trades: number;
   winRate?: number;
+  romPct?: number;
+  runningNetPL?: number;
 }
 
 interface YearSummary {
@@ -16,6 +18,7 @@ interface YearSummary {
     netPL: number;
     trades: number;
     winRate?: number;
+    romPct?: number;
   };
 }
 
@@ -25,6 +28,7 @@ export interface YearlyCalendarSnapshot {
 
 interface YearHeatmapProps {
   data: YearlyCalendarSnapshot;
+  metric?: "pl" | "rom" | "running";
   onMonthClick?: (year: number, month: number) => void;
 }
 
@@ -53,15 +57,25 @@ function formatCompactPL(value: number): string {
   return `${sign}$${abs.toFixed(2)}`;
 }
 
-function getCellColorClass(value: number) {
-  if (value === 0) return "bg-zinc-900 text-zinc-400";
-  if (value > 0 && value < 0.5) return "bg-emerald-900/60 text-emerald-300";
-  if (value >= 0.5) return "bg-emerald-700/60 text-emerald-50";
-  if (value < 0 && value > -0.5) return "bg-rose-900/60 text-rose-300";
-  return "bg-rose-700/70 text-rose-50";
+function getCellColorClass(value: number, metric: "pl" | "rom" | "running") {
+  // Normalize value into buckets for color intensity.
+  const abs = Math.abs(value);
+  const thresholds = metric === "rom" ? [1, 5, 10] : [500, 2000, 5000];
+  const isPositive = value >= 0;
+
+  if (abs === 0) return "bg-zinc-900 text-zinc-400";
+  if (isPositive) {
+    if (abs >= thresholds[2]) return "bg-emerald-700/70 text-emerald-50";
+    if (abs >= thresholds[1]) return "bg-emerald-700/50 text-emerald-100";
+    return "bg-emerald-900/60 text-emerald-300";
+  }
+  // negative
+  if (abs >= thresholds[2]) return "bg-rose-700/70 text-rose-50";
+  if (abs >= thresholds[1]) return "bg-rose-700/50 text-rose-100";
+  return "bg-rose-900/60 text-rose-300";
 }
 
-export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
+export function YearHeatmap({ data, onMonthClick, metric = "pl" }: YearHeatmapProps) {
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-950/90 p-4">
       <header className="mb-4 flex items-center justify-between">
@@ -116,9 +130,14 @@ export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
                     );
                   }
 
-                  const colorClass = getCellColorClass(
-                    Math.max(-1, Math.min(1, monthSummary.netPL / 10_000))
-                  );
+                  const metricValue =
+                    metric === "rom"
+                      ? monthSummary.romPct ?? 0
+                      : metric === "running"
+                      ? monthSummary.runningNetPL ?? monthSummary.netPL
+                      : monthSummary.netPL;
+
+                  const colorClass = getCellColorClass(metricValue, metric);
 
                   return (
                     <td key={monthIndex} className="px-2">
@@ -131,12 +150,24 @@ export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
                       "flex h-14 w-full flex-col items-center justify-center rounded-xl px-2 transition hover:ring-2 hover:ring-primary/40",
                       colorClass
                     )}
-                    title={`$${monthSummary.netPL.toLocaleString()} · ${monthSummary.trades} ${
-                      monthSummary.trades === 1 ? "trade" : "trades"
-                    }`}
+                    title={`${
+                      metric === "rom"
+                        ? `${(monthSummary.romPct ?? 0).toFixed(1)}% ROM`
+                        : `$${(
+                            metric === "running"
+                              ? monthSummary.runningNetPL ?? monthSummary.netPL
+                              : monthSummary.netPL
+                          ).toLocaleString()}`
+                    } · ${monthSummary.trades} ${monthSummary.trades === 1 ? "trade" : "trades"}`}
                   >
                     <div className="font-mono text-xs">
-                      {formatCompactPL(monthSummary.netPL)}
+                      {metric === "rom"
+                        ? `${(monthSummary.romPct ?? 0).toFixed(1)}%`
+                        : formatCompactPL(
+                            metric === "running"
+                              ? monthSummary.runningNetPL ?? monthSummary.netPL
+                              : monthSummary.netPL
+                          )}
                     </div>
                     <div className="mt-0.5 text-[0.65rem] text-zinc-300/80">
                       {monthSummary.trades}{" "}
@@ -150,10 +181,16 @@ export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
                 <td className="px-2">
                   <div
                     className="flex h-14 flex-col items-center justify-center rounded-xl bg-zinc-900 px-2"
-                    title={`$${yearRow.total.netPL.toLocaleString()} · ${yearRow.total.trades} trades`}
+                    title={`${
+                      metric === "pl"
+                        ? `$${yearRow.total.netPL.toLocaleString()}`
+                        : `${(yearRow.total.romPct ?? 0).toFixed(1)}% ROM`
+                    } · ${yearRow.total.trades} trades`}
                   >
                     <div className="font-mono text-xs text-zinc-100">
-                      {formatCompactPL(yearRow.total.netPL)}
+                      {metric === "pl"
+                        ? formatCompactPL(yearRow.total.netPL)
+                        : `${(yearRow.total.romPct ?? 0).toFixed(1)}%`}
                     </div>
                     <div className="mt-0.5 text-[0.65rem] text-zinc-400">
                       {yearRow.total.trades} trades
@@ -168,18 +205,37 @@ export function YearHeatmap({ data, onMonthClick }: YearHeatmapProps) {
 
       <div className="mt-4 flex items-center gap-2 text-[0.65rem] text-zinc-500">
         <span>Legend:</span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm bg-emerald-700/70" /> Large Profit
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm bg-emerald-900/60" /> Small Profit
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm bg-rose-900/60" /> Small Loss
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-3 w-3 rounded-sm bg-rose-700/70" /> Large Loss
-        </span>
+        {metric === "pl" ? (
+          <>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-emerald-700/70" /> Large Profit
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-emerald-900/60" /> Small Profit
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-rose-900/60" /> Small Loss
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-rose-700/70" /> Large Loss
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-emerald-700/70" /> High ROM
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-emerald-900/60" /> Positive ROM
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-rose-900/60" /> Low / Negative ROM
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm bg-rose-700/70" /> Strongly Negative ROM
+            </span>
+          </>
+        )}
         <span className="flex items-center gap-1">
           <span className="h-3 w-3 rounded-sm bg-zinc-900" /> No Trades
         </span>
