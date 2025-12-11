@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  IconAdjustmentsHorizontal,
-  IconCalendar,
   IconChartHistogram,
   IconGauge,
   IconLayoutDashboard,
@@ -11,8 +9,9 @@ import {
   IconRouteSquare,
   IconSparkles,
   IconStack2,
+  IconCalendarStats,
   IconTimelineEvent,
-  IconTopologyStar3,
+  IconTrendingDown,
 } from "@tabler/icons-react";
 import { Blocks } from "lucide-react";
 import Link from "next/link";
@@ -62,26 +61,19 @@ const navData = {
       icon: IconRouteSquare,
     },
     {
+      title: "P/L Calendar",
+      href: "/pl-calendar",
+      icon: IconCalendarStats,
+    },
+    {
       title: "Correlation Matrix",
       href: "/correlation-matrix",
       icon: IconChartHistogram,
     },
     {
-      title: "Multi-Correlation",
-      href: "/multi-correlation",
-      icon: IconTopologyStar3,
-      badge: "New",
-    },
-    {
-      title: "P/L Calendar",
-      href: "/pl-calendar",
-      icon: IconCalendar,
-      badge: "New",
-    },
-    {
-      title: "P/L Analytics",
-      href: "/pl-analytics",
-      icon: IconReportAnalytics,
+      title: "Tail Risk Analysis",
+      href: "/tail-risk-analysis",
+      icon: IconTrendingDown,
       badge: "New",
     },
     {
@@ -97,13 +89,7 @@ const navData = {
       badge: "Beta",
     },
     {
-      title: "TP/SL Optimizer",
-      href: "/tp-optimizer",
-      icon: IconAdjustmentsHorizontal,
-      badge: "Latest",
-    },
-    {
-      title: "NemoBlocks Assistant",
+      title: "TradeBlocks Assistant",
       href: "/assistant",
       icon: IconSparkles,
       badge: "New",
@@ -142,7 +128,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <span className="flex flex-col">
                   <span className="text-sm font-semibold leading-tight">
-                    NemoBlocks
+                    TradeBlocks
                   </span>
                   <span className="text-xs text-muted-foreground">
                     Analytics Platform
