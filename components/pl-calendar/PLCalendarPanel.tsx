@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortfolioStatsCalculator } from "@/lib/calculations/portfolio-stats";
-import { DailyLogEntry } from "@/lib/models/daily-log";
+import type { DailyLogEntry } from "@/lib/models/daily-log";
 import { Trade } from "@/lib/models/trade";
 import { cn } from "@/lib/utils";
 import { getTradingDayKey } from "@/lib/utils/trading-day";
@@ -63,7 +63,6 @@ type TradeWithOptionalDrawdown = Trade & { drawdownPct?: number };
 
 interface PLCalendarPanelProps {
   trades: TradeWithOptionalDrawdown[];
-  dailyLogs?: DailyLogEntry[];
   dateRange?: DateRange;
 }
 
@@ -309,7 +308,6 @@ function computeCalendarMaxDrawdown(
 
 export function PLCalendarPanel({
   trades,
-  dailyLogs,
   dateRange,
 }: PLCalendarPanelProps) {
   // DEBUG: Log what we receive
