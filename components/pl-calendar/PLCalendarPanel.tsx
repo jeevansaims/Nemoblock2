@@ -58,12 +58,28 @@ import { WeekdayAlphaMap } from "./WeekdayAlphaMap";
 import { YearHeatmap, YearlyCalendarSnapshot } from "./YearHeatmap";
 import { YearViewBlock, type CalendarBlockConfig } from "./YearViewBlock";
 
-// Local type extension: drawdownPct is optional in upstream but may be populated by CSV parsers
-type TradeWithOptionalDrawdown = Trade & { drawdownPct?: number };
+// Local type extension: drawdownPct/dayKey are optional for calendar logic
+type TradeWithOptionalDrawdown = Trade & { drawdownPct?: number; dayKey?: string };
 
 interface PLCalendarPanelProps {
   trades: TradeWithOptionalDrawdown[];
   dateRange?: DateRange;
+}
+
+function calculateMaxDrawdownFromValues(values: number[]): number {
+  if (!values.length) return 0;
+
+  let peak = values[0];
+  let maxDd = 0;
+
+  for (const v of values) {
+    peak = Math.max(peak, v);
+    if (peak === 0) continue;
+    const dd = ((peak - v) / peak) * 100;
+    if (dd > maxDd) maxDd = dd;
+  }
+
+  return maxDd;
 }
 
 // Helper to check if a date is within the specified range
@@ -176,7 +192,7 @@ const computeKellyFractions = (trades: Trade[]): Map<string, number> => {
 };
 
 // Trading-day key helper: prefer the stored dayKey, fall back to canonical ET resolver.
-const resolveDayKey = (trade: Trade): string => {
+const resolveDayKey = (trade: TradeWithOptionalDrawdown): string => {
   if (trade.dayKey && trade.dayKey !== "1970-01-01") return trade.dayKey;
   return getTradingDayKey(trade.dateOpened, trade.timeOpened);
 };
@@ -302,7 +318,7 @@ function computeCalendarMaxDrawdown(
     ),
   ];
 
-  const dd = PortfolioStatsCalculator.calculateMaxDrawdownFromValues(values);
+  const dd = calculateMaxDrawdownFromValues(values);
   return dd; // assumed to already be in %
 }
 
@@ -415,7 +431,7 @@ export function PLCalendarPanel({
 
   const updateYearBlockTrades = (
     id: string,
-    newTrades: Trade[],
+    newTrades: TradeWithOptionalDrawdown[],
     name?: string
   ) => {
     setYearBlocks((prev) =>
@@ -425,7 +441,7 @@ export function PLCalendarPanel({
 
   // Shared max drawdown + summary helper so active and uploaded blocks use an identical pipeline.
   const computeMaxDrawdownForTrades = useCallback(
-    (inputTrades: Trade[]) => {
+    (inputTrades: TradeWithOptionalDrawdown[]) => {
       if (inputTrades.length === 0) return 0;
 
       // If trades already carry drawdownPct (e.g., uploaded daily log), respect that directly so

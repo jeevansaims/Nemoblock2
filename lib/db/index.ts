@@ -1,5 +1,5 @@
 /**
- * IndexedDB Database Service for NemoBlocks
+ * IndexedDB Database Service for TradeBlocks
  *
  * Manages the client-side database for storing blocks, trades, and daily logs.
  * Uses a versioned schema with migration support.
@@ -12,7 +12,7 @@
 // import { PortfolioStats, StrategyStats, PerformanceMetrics } from '../models/portfolio-stats'
 
 // Database configuration
-export const DB_NAME = "NemoBlocksDB";
+export const DB_NAME = "TradeBlocksDB";
 export const DB_VERSION = 3;
 
 // Object store names
@@ -334,47 +334,55 @@ export class TransactionError extends DatabaseError {
 
 // Re-export functions from individual stores
 export {
-    createBlock,
-    deleteBlock,
-    getActiveBlock,
-    getAllBlocks,
-    getBlock,
-    updateBlock,
-    updateBlockStats
+  createBlock,
+  deleteBlock,
+  getActiveBlock,
+  getAllBlocks,
+  getBlock,
+  updateBlock,
+  updateBlockStats,
 } from "./blocks-store";
 export {
-    deleteCombinedTradesCache, getCombinedTradesCache, hasCombinedTradesCache,
-    invalidateBlockCaches, storeCombinedTradesCache
-} from "./combined-trades-cache";
-export {
-    addDailyLogEntries,
-    deleteDailyLogsByBlock,
-    getDailyLogCountByBlock,
-    getDailyLogsByBlock,
-    updateDailyLogsForBlock
+  addDailyLogEntries,
+  deleteDailyLogsByBlock,
+  getDailyLogCountByBlock,
+  getDailyLogsByBlock,
+  updateDailyLogsForBlock,
 } from "./daily-logs-store";
 export {
-    deletePerformanceSnapshotCache, getPerformanceSnapshotCache, hasPerformanceSnapshotCache, storePerformanceSnapshotCache
-} from "./performance-snapshot-cache";
-export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache";
-export {
-    addReportingTrades,
-    deleteReportingTradesByBlock,
-    getReportingStrategiesByBlock,
-    getReportingTradeCountByBlock,
-    getReportingTradesByBlock,
-    updateReportingTradesForBlock
+  addReportingTrades,
+  deleteReportingTradesByBlock,
+  getReportingStrategiesByBlock,
+  getReportingTradeCountByBlock,
+  getReportingTradesByBlock,
+  updateReportingTradesForBlock,
 } from "./reporting-logs-store";
 export {
-    addTrades,
-    deleteTradesByBlock,
-    getTradeCountByBlock,
-    getTradesByBlock,
-    getTradesByBlockWithOptions,
-    getTradesByDateRange,
-    updateTradesForBlock
+  addTrades,
+  deleteTradesByBlock,
+  getTradeCountByBlock,
+  getTradesByBlock,
+  getTradesByBlockWithOptions,
+  updateTradesForBlock,
 } from "./trades-store";
 export {
-    deleteWalkForwardAnalysesByBlock, deleteWalkForwardAnalysis, getWalkForwardAnalysesByBlock, getWalkForwardAnalysis, saveWalkForwardAnalysis
+  saveWalkForwardAnalysis,
+  getWalkForwardAnalysis,
+  getWalkForwardAnalysesByBlock,
+  deleteWalkForwardAnalysis,
+  deleteWalkForwardAnalysesByBlock,
 } from "./walk-forward-store";
-
+export {
+  storeCombinedTradesCache,
+  getCombinedTradesCache,
+  deleteCombinedTradesCache,
+  hasCombinedTradesCache,
+  invalidateBlockCaches,
+} from "./combined-trades-cache";
+export {
+  storePerformanceSnapshotCache,
+  getPerformanceSnapshotCache,
+  deletePerformanceSnapshotCache,
+  hasPerformanceSnapshotCache,
+} from "./performance-snapshot-cache";
+export type { CachedPerformanceSnapshot } from "./performance-snapshot-cache";

@@ -4,20 +4,22 @@ import { DateRange } from "react-day-picker";
 
 import { Trade } from "@/lib/models/trade";
 
+type CalendarTrade = Trade & { drawdownPct?: number; dayKey?: string };
+
 export type CalendarBlockConfig = {
   id: string;
   isPrimary: boolean;
-  trades?: Trade[];
+  trades?: CalendarTrade[];
   name?: string;
 };
 
 interface YearViewBlockProps {
   block: CalendarBlockConfig;
-  baseTrades: Trade[];
+  baseTrades: CalendarTrade[];
   dateRange?: DateRange;
-  onUpdateTrades: (tradesForBlock: Trade[], name?: string) => void;
+  onUpdateTrades: (tradesForBlock: CalendarTrade[], name?: string) => void;
   onClose: () => void;
-  renderContent: (trades: Trade[]) => React.ReactNode;
+  renderContent: (trades: CalendarTrade[]) => React.ReactNode;
 }
 
 function parseNumber(raw: string | undefined): number {
@@ -102,7 +104,7 @@ function parseDate(raw: string | undefined): Date | undefined {
  * Tolerant: missing fields fall back to safe defaults so we can satisfy Trade.
  */
 function parseOptionOmegaCsv(csvText: string): {
-  trades: Trade[];
+  trades: CalendarTrade[];
   detectedMaxDrawdown: number | null;
 } {
   // 1. Universal line splitting
@@ -176,7 +178,7 @@ function parseOptionOmegaCsv(csvText: string): {
   const idxMaxProfit = findIndex(["Max Profit"]);
   const idxMaxLoss = findIndex(["Max Loss"]);
 
-  const trades: Trade[] = [];
+  const trades: CalendarTrade[] = [];
   const detectedMaxDrawdownValues: number[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -274,7 +276,7 @@ function parseOptionOmegaCsv(csvText: string): {
       marginReqVal = 0;
     }
 
-    const trade: Trade = {
+    const trade: CalendarTrade = {
       dateOpened: openedOn ?? new Date("1970-01-01"),
       timeOpened: "",
       dayKey: openedOn ? format(openedOn, "yyyy-MM-dd") : undefined,
@@ -338,7 +340,7 @@ function parseOptionOmegaCsv(csvText: string): {
 }
 
 // Restoration of 99268ce "legacy" logic for Max Drawdown
-function computeLegacyMaxDrawdown(trades: Trade[]): number {
+function computeLegacyMaxDrawdown(trades: CalendarTrade[]): number {
   if (!trades || trades.length === 0) return 0;
 
   // Sort by date/time
@@ -416,7 +418,7 @@ export function YearViewBlock({
   dateRange, // Added dateRange to destructuring
 }: YearViewBlockProps) {
   const { isPrimary, name, trades } = block; // Restored id for logging
-  const [uploadedTrades, setUploadedTrades] = React.useState<Trade[]>([]);
+  const [uploadedTrades, setUploadedTrades] = React.useState<CalendarTrade[]>([]);
   // Store the explicit Max DD found in CSV, if any
   const [uploadedMaxDrawdown, setUploadedMaxDrawdown] = React.useState<
     number | null
